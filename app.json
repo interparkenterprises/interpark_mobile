@@ -4,24 +4,72 @@
     "slug": "InterPark",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/logo.png",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "plugins": [
+      "@react-native-google-signin/google-signin"
+    ],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.interpark.realestate",
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app needs access to the camera to upload property images.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload property images.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": ["com.googleusercontent.apps.404388363961-hdt1e7t3ok9lgbd2biiqepmooign1n8k.apps.googleusercontent.com"]
+          }
+        ]
+      }
     },
     "android": {
+      "package": "com.interpark.realestate",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": {
+            "scheme": "https",
+            "host": "auth.expo.io"
+          },
+          "category": ["DEFAULT", "BROWSABLE"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "apiUrl": "http://10.0.2.2:8000/api",
+      "eas": {
+        "projectId": "db6634eb-4587-4a79-bbd7-cc68a84471f5"
+      },
+      "googleClientIdIos": "404388363961-hdt1e7t3ok9lgbd2biiqepmooign1n8k.apps.googleusercontent.com",
+      "googleClientIdAndroid": "404388363961-a1ei5i7bd0ajavteejs7dnlsinuenj7v.apps.googleusercontent.com"
+    },
+    "scheme": "interpark",
+    "newArchEnabled": true,
+    "devClient": true, 
+    "notification": {
+      "icon": "./assets/adaptive-icon.png"  
     }
   }
 }
