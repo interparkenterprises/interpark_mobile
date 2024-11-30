@@ -1,21 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  Modal,
-  ScrollView,
-  Dimensions,
-  TextInput,
-} from 'react-native';
+import { View,Text,FlatList,Image,TouchableOpacity,StyleSheet, ActivityIndicator, Alert, Modal, ScrollView, 
+  Dimensions, TextInput,} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { PROVIDER_OSM, Marker } from 'react-native-maps';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { API_BASE_URL, GEOCODING_API_KEY } from '@env';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -31,6 +19,8 @@ export default function PropertiesList() {
   const [expandedProperty, setExpandedProperty] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState(''); // Debounced search query
+  const [selectedType, setSelectedType] = useState('All'); // Added state for filtering
   const [userRole, setUserRole] = useState('');
   const [favorites, setFavorites] = useState([]);
   const scrollRef = useRef(null);
@@ -38,7 +28,8 @@ export default function PropertiesList() {
   const route = useRoute();
   const { propertyId } = route.params || {};
 
-  const getImageUrl = (filename) => `${API_BASE_URL}/properties/images/${filename}`;
+  const getImageUrl = (filename) =>
+    `https://interparkenterprisespacebucket.blr1.cdn.digitaloceanspaces.com/Propertypic/${filename}`;
 
   const fetchProperties = async (isRefresh = false) => {
     if (isRefresh) setIsRefreshing(true);
@@ -152,6 +143,8 @@ export default function PropertiesList() {
     }
   };
 
+  
+
   useEffect(() => {
   const fetchData = async () => {
     await fetchUserRole();
@@ -223,37 +216,29 @@ export default function PropertiesList() {
     setExpandedProperty(expandedProperty === propertyId ? null : propertyId);
   };
 
-  const getCoordinates = async (location) => {
-    try {
-      const response = await axios.get(`https://api.opencagedata.com/geocode/v1/json`, {
-        params: {
-          q: location,
-          key: GEOCODING_API_KEY,
-        },
-      });
+  
 
-      if (response.data.results.length > 0) {
-        const { geometry } = response.data.results[0];
-        return {
-          latitude: geometry.lat,
-          longitude: geometry.lng,
-        };
-      } else {
-        console.warn('No results found for location:', location);
-        return null;
-      }
-    } catch (error) {
-      console.error('Error fetching coordinates:', error);
-      Alert.alert('Error', 'Failed to get location coordinates.');
-      return null;
-    }
+  const getUniqueTypes = (properties) => {
+    const types = properties.map((item) => item.type);
+    return ['All', ...new Set(types)];
   };
 
   const filteredProperties = properties.filter((item) =>
-    item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.purpose.toLowerCase().includes(searchQuery.toLowerCase())
+    (selectedType === 'All' || item.type === selectedType) &&
+    (item.title.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+      item.location.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+      item.purpose.toLowerCase().includes(debouncedQuery.toLowerCase()))
   );
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 500); // Debounce delay
+
+    return () => {
+      clearTimeout(handler); // Cleanup timeout on query change
+    };
+  }, [searchQuery]);
 
   const renderProperty = ({ item }) => {
     const price = parseFloat(item.price?.$numberDouble) || 0.0;
@@ -319,7 +304,7 @@ export default function PropertiesList() {
             <TouchableOpacity
               onPress={() => handleChatRoomNavigation(item._id.$oid, item.agentLandlordId.$oid)}
             >
-              <Ionicons name="chatbubbles-outline" size={20} color="#ffcc00" style={styles.messageIcon} />
+              <Ionicons name="chatbubbles-outline" size={25} color="#ffcc00" style={styles.messageIcon} />
             </TouchableOpacity>
           )}
           
@@ -357,17 +342,30 @@ export default function PropertiesList() {
         onChangeText={setSearchQuery}
       />
 
+      {/* Filter Bar */}
+      <View style={styles.filterBar}>
+        {getUniqueTypes(properties).map((type) => (
+          <TouchableOpacity
+            key={type}
+            style={[styles.filterButton, selectedType === type && styles.activeFilterButton]}
+            onPress={() => setSelectedType(type)}
+          >
+            <Text style={styles.filterText}>{type}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {loading ? (
         <ActivityIndicator size="large" color="#0000ff" />
       ) : filteredProperties.length > 0 ? (
         <FlatList
-          ref={scrollRef} // Attach the ref to FlatList
+          ref={scrollRef}
           data={filteredProperties}
           renderItem={renderProperty}
           keyExtractor={(item) => item._id.$oid}
           contentContainerStyle={styles.listContainer}
-          refreshing={isRefreshing} // Pull-to-refresh control
-          onRefresh={() => fetchProperties(true)} // Trigger refresh on pull-down
+          refreshing={isRefreshing}
+          onRefresh={() => fetchProperties(true)}
         />
       ) : (
         <Text style={styles.noResultsText}>No such property exists yet.</Text>
@@ -402,12 +400,19 @@ export default function PropertiesList() {
 
 function MapViewComponent({ location }) {
   const [coordinates, setCoordinates] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchCoordinates = async () => {
-      const coords = await getCoordinates(location);
-      if (coords) {
-        setCoordinates(coords);
+      try {
+        const coords = await getCoordinates(location);
+        if (coords) {
+          setCoordinates(coords);
+        } else {
+          setError('No results found for the specified location.');
+        }
+      } catch (e) {
+        setError('Failed to fetch coordinates.');
       }
     };
     fetchCoordinates();
@@ -415,7 +420,7 @@ function MapViewComponent({ location }) {
 
   const getCoordinates = async (location) => {
     try {
-      const response = await axios.get(`https://api.opencagedata.com/geocode/v1/json`, {
+      const response = await axios.get('https://api.opencagedata.com/geocode/v1/json', {
         params: {
           q: location,
           key: GEOCODING_API_KEY,
@@ -428,19 +433,21 @@ function MapViewComponent({ location }) {
           latitude: geometry.lat,
           longitude: geometry.lng,
         };
-      } else {
-        console.warn('No results found for location:', location);
-        return null;
       }
+      return null;
     } catch (error) {
       console.error('Error fetching coordinates:', error);
-      Alert.alert('Error', 'Failed to get location coordinates.');
-      return null;
+      throw error;
     }
   };
 
+  if (error) {
+    return <Text style={styles.error}>{error}</Text>;
+  }
+
   return coordinates ? (
     <MapView
+      provider={PROVIDER_OSM} // Use OpenStreetMap as the provider
       style={styles.map}
       initialRegion={{
         latitude: coordinates.latitude,
@@ -459,15 +466,19 @@ function MapViewComponent({ location }) {
 
 // Define the styles
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#585858' },
-  searchBar: { backgroundColor: '#2c2c2c', color: '#ffffff', padding: 10, margin: 10, borderRadius: 8 },
+  container: { flex: 1, backgroundColor: '#58595b' },
+  searchBar: { backgroundColor: '#231F20', color: '#ffffff', padding: 10, margin: 10,marginTop: 30, borderRadius: 8 },
+  filterBar: { flexDirection: 'row', justifyContent: 'center', marginVertical: 10 },
+  filterButton: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, backgroundColor: '#005478', marginHorizontal: 5 },
+  activeFilterButton: { backgroundColor: '#ffcc00' },
+  filterText: { color: '#ffffff', fontSize: 14 },
   noResultsText: { color: '#ffffff', textAlign: 'center', marginTop: 20 },
-  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' },
-  propertyCard: { backgroundColor: '#383838', borderRadius: 10, padding: 10, marginVertical: 8, marginHorizontal: 16 },
+  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#231F20' },
+  propertyCard: { backgroundColor: '#231F20', borderRadius: 10, padding: 10, marginVertical: 8, marginHorizontal: 16 },
   propertyImage: { width: width - 40, height: 200, borderRadius: 10 },
   imageScroll: { height: 200 },
   propertyInfo: { paddingVertical: 10 },
-  messageIcon: {marginLeft: 330 },
+  messageIcon: {marginLeft: 280 },
   favoriteIconContainer: {
     position: 'absolute',
     top: 10,
@@ -493,7 +504,7 @@ const styles = StyleSheet.create({
   loadingMapText: { color: '#ffffff', textAlign: 'center', marginTop: 10 },
   modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
   fullscreenImage: { width, height: '100%' },
-  closeButton: { position: 'absolute', top: 20, right: 20 },
+  closeButton: { position: 'absolute', top: 20, marginTop: 30, right: 20 },
   closeButtonText: { color: '#ffffff', fontSize: 18 },
 });
 

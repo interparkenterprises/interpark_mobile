@@ -9,6 +9,7 @@ import {
   TextInput,
   ActivityIndicator,
   ScrollView,
+  BackHandler,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
@@ -16,6 +17,7 @@ import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '@env';
 import { useNavigation } from '@react-navigation/native';
+import { Asset } from 'expo-asset'; // Import expo-asset
 
 
 export default function AgentProfile() {
@@ -29,7 +31,18 @@ export default function AgentProfile() {
   const [nationalIdOrPassport, setNationalIdOrPassport] = useState('');
   const [agentNumber, setAgentNumber] = useState('');
   const navigation = useNavigation();
+  const [isSaving, setIsSaving] = useState(false); // New state to track saving state
 
+
+  // Preload Avatar function
+  const preloadAvatar = async (uri) => {
+    try {
+      const asset = Asset.fromURI(uri);
+      await asset.downloadAsync();
+    } catch (error) {
+      console.error('Error preloading image:', error);
+    }
+  };
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -40,6 +53,12 @@ export default function AgentProfile() {
           setUser(parsedUser);
           setAvatar(parsedUser.avatar || null);
           setNewUsername(parsedUser.username || '');
+
+          // Preload the avatar if it's available
+          if (parsedUser?.avatar) {
+            preloadAvatar(parsedUser.avatar);
+          }
+
           await fetchAgentProfile(parsedUser.id); // Fetch the agent profile details
         } else {
           console.warn('No user data found in AsyncStorage.');
@@ -50,10 +69,14 @@ export default function AgentProfile() {
         setLoading(false);
       }
     };
-    fetchUserData();
-  }, []);
-  //getAgentUserProfile info
 
+    fetchUserData();
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', handleExit);
+    return () => backHandler.remove(); // Cleanup on unmount
+  }, []);
+
+  // Get Agent Profile info
   const fetchAgentProfile = async (userId) => {
     try {
       const token = await AsyncStorage.getItem('auth_token');
@@ -82,14 +105,7 @@ export default function AgentProfile() {
     }
   };
 
-  const validateFields = () => {
-    if (!phoneNumber || !nationalIdOrPassport || !agentNumber) {
-      Alert.alert('Validation Error', 'All fields are required.');
-      return false;
-    }
-    return true;
-  };
-
+  // Image Picker for Avatar
   const pickImage = async () => {
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -117,6 +133,9 @@ export default function AgentProfile() {
           } else {
             Alert.alert('Error', 'User ID not found.');
           }
+
+          // Preload the newly selected avatar
+          preloadAvatar(uri);
         } else {
           Alert.alert('Error', 'The selected image is invalid or empty.');
         }
@@ -126,6 +145,7 @@ export default function AgentProfile() {
     }
   };
 
+  // Upload Avatar function
   const uploadAvatar = async (avatarUri) => {
     try {
       const formData = new FormData();
@@ -155,6 +175,9 @@ export default function AgentProfile() {
         setUser((prevUser) => ({ ...prevUser, avatar: data.avatar }));
         setAvatar(data.avatar);
         await AsyncStorage.setItem('user', JSON.stringify({ ...user, avatar: data.avatar }));
+
+        // Preload the uploaded avatar
+        preloadAvatar(data.avatar);
       } else {
         throw new Error(data.error || 'Failed to upload avatar.');
       }
@@ -163,44 +186,81 @@ export default function AgentProfile() {
       Alert.alert('Error', error.message || 'An error occurred while uploading the avatar.');
     }
   };
+  const validateFields = () => {
+    console.log('Validating fields...');
+    if (!phoneNumber.trim() || !nationalIdOrPassport.trim() || !agentNumber.trim()) {
+      console.log('Validation failed: Missing required fields.');
+      Alert.alert('Validation Error', 'All fields are required.');
+      return false;
+    }
+    console.log('Validation succeeded.');
+    return true;
+  };
 
   const handleSaveProfile = async () => {
-    if (!validateFields()) return;
+    console.log('Save Profile button clicked!');
+  
+    if (!validateFields()) {
+      console.log('Validation failed.');
+      return;
+    }
+    console.log('Validation passed.');
+  
+    setIsSaving(true); // Show activity indicator when saving starts
   
     try {
       const token = await AsyncStorage.getItem('auth_token');
-      const response = await fetch(
-        `${API_BASE_URL}/auth/agent-profile/${user.id}`, // Use user.id from the current user state
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`, // Ensure the token is included
-          },
-          body: JSON.stringify({
-            phoneNumber,
-            nationalIdOrPassport,
-            agentNumber,
-          }),
-        }
-      );
+      console.log('Retrieved Token:', token);
+  
+      if (!token) {
+        console.log('No auth token found!');
+        Alert.alert('Authentication Error', 'You are not authenticated.');
+        setIsSaving(false);
+        return;
+      }
+  
+      if (!user?.id) {
+        console.log('User ID is missing or invalid!');
+        Alert.alert('Error', 'User ID is not found.');
+        setIsSaving(false);
+        return;
+      }
+  
+      console.log('Making API call...');
+      console.log('API URL:', `${API_BASE_URL}/auth/agent-profile/${user.id}`);
+      console.log('Request Body:', { phoneNumber, nationalIdOrPassport, agentNumber });
+  
+      const response = await fetch(`${API_BASE_URL}/auth/agent-profile/${user.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ phoneNumber, nationalIdOrPassport, agentNumber }),
+      });
   
       const data = await response.json();
+      console.log('Response Status:', response.status);
+      console.log('Response Data:', data);
+  
       if (response.ok) {
         Alert.alert('Success', 'Profile updated successfully!');
-        // Update the state with the new user data
-        const updatedUser = { ...user, phoneNumber, nationalIdOrPassport, agentNumber };
-        setUser(updatedUser);
-        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+        setUser({ ...user, phoneNumber, nationalIdOrPassport, agentNumber });
+        await AsyncStorage.setItem('user', JSON.stringify({ ...user, phoneNumber, nationalIdOrPassport, agentNumber }));
         setIsEditing(false);
       } else {
         throw new Error(data.error || 'Failed to update profile.');
       }
     } catch (error) {
-      console.error('Update Error:', error);
+      console.error('Update Error:', error.message || error);
       Alert.alert('Error', error.message || 'An error occurred while updating the profile.');
+    } finally {
+      setIsSaving(false); // Hide activity indicator when operation finishes
     }
   };
+  
+  
+  
   
 
   const handleLogout = async () => {
@@ -222,6 +282,11 @@ export default function AgentProfile() {
         await AsyncStorage.clear();
         Alert.alert('Logged Out', data.message);
         setUser(null);
+        // Reset the navigation stack to the Login screen
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Login' }],
+        });
       } else {
         Alert.alert('Logout Failed', data.error || 'An error occurred while logging out.');
       }
@@ -231,9 +296,23 @@ export default function AgentProfile() {
     }
   };
   // Function to exit the app
-  const handleExitApp = () => {
-    BackHandler.exitApp(); // Exit the app
+  const handleExit = () => {
+    Alert.alert(
+      "Exit App",
+      "Are you sure you want to exit?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Yes",
+          onPress: () => {
+            BackHandler.exitApp(); // Close the app gracefully
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
+  
 
   
   
@@ -314,18 +393,27 @@ export default function AgentProfile() {
         value={agentNumber}
         onChangeText={setAgentNumber}
         style={styles.input}
-        placeholder="Agent Number"
+        placeholder="Agent Registration Number"
         placeholderTextColor="black"
       />
 
-      <TouchableOpacity style={styles.button} onPress={handleSaveProfile}>
-        <Text style={styles.buttonText}>Save Profile</Text>
+      <TouchableOpacity
+        style={[styles.button, isSaving && { opacity: 0.6 }]} // Dim the button when loading
+        onPress={isSaving ? null : handleSaveProfile} // Disable button during save
+        disabled={isSaving}
+      >
+        {isSaving ? (
+          <ActivityIndicator size="small" color="#ffffff" />
+        ) : (
+          <Text style={styles.buttonText}>Save Profile</Text>
+        )}
       </TouchableOpacity>
+
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.buttonText}>Logout</Text>
       </TouchableOpacity>
-      <TouchableOpacity onPress={handleExitApp} style={styles.exitButton}>
+      <TouchableOpacity onPress={handleExit} style={styles.exitButton}>
         <Text style={styles.buttonText}>Exit App</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -349,9 +437,10 @@ const styles = StyleSheet.create({
   myListButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E90FF',
+    backgroundColor: '#005478',
     padding: 8,
     borderRadius: 16,
+    marginTop: 30,
   },
   myListText: {
     color: '#fff',
@@ -373,7 +462,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#1E90FF',
+    backgroundColor: '#005478',
     borderRadius: 15,
     padding: 4,
   },
@@ -401,7 +490,7 @@ const styles = StyleSheet.create({
     color: 'black',
   },
   button: {
-    backgroundColor: '#1E90FF',
+    backgroundColor: '#005478',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
     View, Text, TextInput, Button, StyleSheet, Alert, ScrollView, Image, TouchableOpacity, 
-    KeyboardAvoidingView, Platform 
+    KeyboardAvoidingView, Platform, ActivityIndicator 
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
@@ -21,6 +21,7 @@ export default function AddProperty() {
     const [authToken, setAuthToken] = useState(null);
     const [purpose, setPurpose] = useState('BUY'); // Default purpose
     const navigation = useNavigation();
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -106,8 +107,12 @@ export default function AddProperty() {
         }
     
         const formattedNearbyPlaces = nearbyPlaces.split(',').map(place => place.trim());
+        setIsLoading(true); // Start loading
         const uploadedImages = await uploadImages();
-        if (!uploadedImages) return;
+        if (!uploadedImages) {
+            setIsLoading(false); // Stop loading on error
+            return;
+        }
     
         const propertyData = {
             title,
@@ -121,8 +126,6 @@ export default function AddProperty() {
             purpose,
         };
     
-        console.log('Final Property Data:', propertyData); // Log final data before sending
-    
         try {
             const response = await axios.post(
                 `${API_BASE_URL}/properties/add`,
@@ -132,10 +135,9 @@ export default function AddProperty() {
                         'Content-Type': 'application/json',
                         Authorization: `Bearer ${authToken}`,
                     },
-                    
                 }
             );
-            console.log('Property Add Response:', response.data); // Log success response
+            console.log('Property Add Response:', response.data);
             Alert.alert('Success', 'Property added successfully!');
             // Reset all fields to initial values
             setTitle('');
@@ -151,8 +153,11 @@ export default function AddProperty() {
             console.error('Add Property Error:', error);
             console.log('Axios Error Details:', error.toJSON()); // Log error details
             Alert.alert('Error', 'Failed to add property.');
+        } finally {
+            setIsLoading(false); // Stop loading after success or error
         }
     };
+    
     
 
     return (
@@ -240,10 +245,22 @@ export default function AddProperty() {
                 </View>
             </ScrollView>
             <View style={styles.buttonContainer}>
-                <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-                    <Text style={styles.submitButtonText}>Submit Property</Text>
+                <TouchableOpacity 
+                    style={[styles.submitButton, isLoading && { backgroundColor: '#aaa' }]} 
+                    onPress={handleSubmit} 
+                    disabled={isLoading} // Disable the button when loading
+                >
+                    {isLoading ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="small" color="#fff" />
+                            <Text style={styles.loadingText}>Submitting...</Text>
+                        </View>
+                    ) : (
+                        <Text style={styles.submitButtonText}>Submit Property</Text>
+                    )}
                 </TouchableOpacity>
             </View>
+
         </KeyboardAvoidingView>
     );
 }
@@ -258,6 +275,7 @@ const styles = StyleSheet.create({
         fontSize: 24, 
         fontWeight: 'bold', 
         marginBottom: 20, 
+        marginTop: 30,
         color: '#fff' 
     },
     input: { 
@@ -269,7 +287,7 @@ const styles = StyleSheet.create({
         color: '#000' 
     },
     imageButton: { 
-        backgroundColor: '#0288D1', 
+        backgroundColor: '#005478', 
         padding: 15, 
         borderRadius: 8, 
         marginBottom: 10 
@@ -315,10 +333,10 @@ const styles = StyleSheet.create({
     
     buttonContainer: { 
         padding: 10, 
-        backgroundColor: '#2C2C2C' 
+        backgroundColor: '#231F20' 
     },
     submitButton: { 
-        backgroundColor: '#007BFF', 
+        backgroundColor: '#005478', 
         padding: 15, 
         borderRadius: 8 
     },
@@ -327,6 +345,16 @@ const styles = StyleSheet.create({
         textAlign: 'center', 
         fontWeight: 'bold' 
     },
+    loadingContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    loadingText: {
+        color: '#fff',
+        marginLeft: 10,
+    },
+    
     checkboxContainer: { 
         flexDirection: 'row', 
         justifyContent: 'space-around', 

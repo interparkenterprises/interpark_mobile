@@ -29,6 +29,9 @@ export default function ForgotPassword({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <Text style={styles.backButtonText}>Back</Text>
+      </TouchableOpacity>
       <Text style={styles.title}>Reset Your Password</Text>
       <TextInput
         style={styles.input}
@@ -49,6 +52,19 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: 20,
+    backgroundColor: '#585858',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 40,
+    left: 20,
+    backgroundColor: '#ddd',
+    padding: 10,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: 'black',
+    fontSize: 16,
   },
   title: {
     fontSize: 24,

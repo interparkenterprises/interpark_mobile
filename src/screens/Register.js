@@ -1,12 +1,17 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, Alert, StyleSheet, Animated, TouchableOpacity, ImageBackground } from 'react-native';
+import { View, Text, TextInput, Alert, StyleSheet, Animated, TouchableOpacity, Image, ActivityIndicator,
+  Linking
+ } from 'react-native';
 import axios from 'axios';
+import DropDownPicker from 'react-native-dropdown-picker';
 import BouncyCheckbox from 'react-native-bouncy-checkbox';
+import { useFonts } from 'expo-font';
 import { API_BASE_URL } from '@env';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'; // Import the icon library
+//import AsyncStorage from '@react-native-async-storage/async-storage';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -14,10 +19,17 @@ export default function Register({ navigation }) {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('CLIENT');
-  const [isClientChecked, setClientChecked] = useState(true);
-  const [isAgentChecked, setAgentChecked] = useState(false);
-  const [isTermsChecked, setTermsChecked] = useState(false); // New state
+  const [secureTextEntry, setSecureTextEntry] = useState(true); // Controls password visibility
+  const [role, setRole] = useState(''); // Selected role
+  const [open, setOpen] = useState(false); // Controls dropdown visibility
+  const [items, setItems] = useState([
+    { label: 'Register as Client', value: 'CLIENT' },
+    { label: 'Register as Agent', value: 'AGENT_LANDLORD' },
+  ]);
+  const [isTermsChecked, setTermsChecked] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  
 
 
   const animation = useRef(new Animated.Value(1)).current;
@@ -92,200 +104,210 @@ export default function Register({ navigation }) {
   const handleRegister = async () => {
     if (!validateInputs()) return;
 
+    setLoading(true); // Start loading
+
     try {
-      await axios.post(`${API_BASE_URL}/auth/register`, { 
-        email, 
-        username, 
-        password, 
-        role 
-      });
-      Alert.alert('Registration Successful', 'You can now log in');
-      navigation.navigate('Login');
+        // Step 1: Check if the email or username already exists
+        const checkResponse = await axios.post(`${API_BASE_URL}/auth/verify-user`, {
+            email,
+            username,
+        });
+
+        if (checkResponse.data.exists) {
+            Alert.alert('Registration Failed', 'The User already exists');
+            setLoading(false); // Stop loading
+            return;
+        }
+
+        // Step 2: Proceed with registration
+        await axios.post(`${API_BASE_URL}/auth/register`, {
+            email,
+            username,
+            password,
+            role,
+        });
+
+        Alert.alert('Registration Successful', 'Please check your email to confirm your email address before logging in.');
+        setLoading(false); // Stop loading
+        navigation.navigate('Login');
     } catch (error) {
-      console.error(error.response?.data || error.message);
-      Alert.alert('Registration Failed', 'Please try again');
+        console.error(error.response?.data || error.message);
+        Alert.alert('Registration Failed', 'Please try again');
+        setLoading(false); // Stop loading
     }
   };
 
-  const handlePressIn = () => {
-    Animated.spring(animation, { toValue: 0.95, useNativeDriver: true }).start();
-  };
 
-  const handlePressOut = () => {
-    Animated.spring(animation, { toValue: 1, useNativeDriver: true }).start();
-  };
 
-  const handleClientSelect = () => {
-    setRole('CLIENT');
-    setClientChecked(true);
-    setAgentChecked(false);
-  };
-
-  const handleAgentSelect = () => {
-    setRole('AGENT_LANDLORD');
-    setClientChecked(false);
-    setAgentChecked(true);
-  };
 
   return (
-    <ImageBackground 
-      source={require('../../assets/House2.jpg')}
-      style={styles.background}
-      resizeMode="cover"
-    >
-      <View style={styles.container}>
-        <Text style={styles.title}>Register</Text>
+    <View style={styles.container}>
+      <Image source={require('../../assets/logo.png')} style={styles.logo} />
+      <Text style={styles.title}>Register</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="black"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Username"
-          placeholderTextColor="black"
-          value={username}
-          onChangeText={setUsername}
-        />
+      <TextInput
+        style={styles.input}
+        placeholder="Email"
+        placeholderTextColor="black"
+        value={email}
+        onChangeText={setEmail}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Username"
+        placeholderTextColor="black"
+        value={username}
+        onChangeText={setUsername}
+      />
+      <View style={{ position: 'relative' }}>
         <TextInput
           style={styles.input}
           placeholder="Password"
           placeholderTextColor="black"
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
+          secureTextEntry={secureTextEntry}
         />
-        <BouncyCheckbox
-          size={25}
-          fillColor="green"
-          unfillColor="#FFFFFF"
-          text="I accept the Terms and Conditions"
-          iconStyle={{ borderColor: 'green' }}
-          innerIconStyle={{ borderWidth: 2 }}
-          isChecked={isTermsChecked}
-          disableBuiltInState
-          onPress={() => setTermsChecked(!isTermsChecked)}
-          style={styles.checkbox}
-        />
-
-        <BouncyCheckbox
-          size={25}
-          fillColor="red"
-          unfillColor="#FFFFFF"
-          text="Register as Client"
-          iconStyle={{ borderColor: 'red' }}
-          innerIconStyle={{ borderWidth: 2 }}
-          isChecked={isClientChecked}
-          disableBuiltInState
-          onPress={handleClientSelect}
-          style={styles.checkbox}
-        />
-
-        <BouncyCheckbox
-          size={25}
-          fillColor="blue"
-          unfillColor="#FFFFFF"
-          text="Register as Agent"
-          iconStyle={{ borderColor: 'blue' }}
-          innerIconStyle={{ borderWidth: 2 }}
-          isChecked={isAgentChecked}
-          disableBuiltInState
-          onPress={handleAgentSelect}
-          style={styles.checkbox}
-        />
-
-        <Animated.View style={{ transform: [{ scale: animation }] }}>
-          <TouchableOpacity
-            style={styles.registerButton}
-            onPressIn={handlePressIn}
-            onPressOut={handlePressOut}
-            onPress={handleRegister}
-          >
-            <Text style={styles.registerButtonText}>Register</Text>
-          </TouchableOpacity>
-        </Animated.View>
-
         <TouchableOpacity
-          disabled={!request}
-          style={styles.googleButton}
-          onPress={() => promptAsync()}
+          style={styles.eyeIcon}
+          onPress={() => setSecureTextEntry(!secureTextEntry)}
         >
-          <Text style={styles.googleButtonText}>Register with Google</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.loginButton} 
-          onPress={() => navigation.navigate('Login')}
-        >
-          <Text style={styles.loginText}>Already have an account? Login</Text>
+          <Icon name={secureTextEntry ? 'eye-off' : 'eye'} size={24} color="gray" />
         </TouchableOpacity>
       </View>
-    </ImageBackground>
+
+      {/* Dropdown for Role Selection */}
+      <DropDownPicker
+        open={open}
+        value={role}
+        items={items}
+        setOpen={setOpen}
+        setValue={setRole}
+        setItems={setItems}
+        placeholder="Select a role"
+        containerStyle={styles.dropdownContainer}
+        style={styles.dropdown}
+        dropDownContainerStyle={styles.dropdownList}
+      />
+
+      
+      {/* Terms and Conditions Checkbox */}
+      <BouncyCheckbox
+        size={25}
+        fillColor="green"
+        unfillColor="#FFFFFF"
+        iconStyle={{ borderColor: 'green' }}
+        innerIconStyle={{ borderWidth: 2 }}
+        isChecked={isTermsChecked}
+        disableBuiltInState
+        onPress={() => setTermsChecked(!isTermsChecked)}
+        style={styles.checkbox}
+        textComponent={
+          <Text style={styles.checkboxText}>
+            By continuing, you're accepting our{' '}
+            <TouchableOpacity onPress={() => Linking.openURL('https://your-terms-url.com')}>
+              <Text style={styles.checkboxLink}>terms of service</Text>
+            </TouchableOpacity>.
+          </Text>
+        }
+      />
+
+
+      <Animated.View style={{ transform: [{ scale: animation }] }}>
+        <TouchableOpacity
+          style={styles.registerButton}
+          onPress={handleRegister}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Text style={styles.registerButtonText}>Register</Text>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
+
+      <TouchableOpacity
+        style={styles.googleButton}
+        onPress={() => promptAsync()}
+        disabled={loading || !request}
+      >
+        <Text style={styles.googleButtonText}>Register with </Text>
+        <Image
+          source={require('../../assets/google-logo-icon.png')}
+          style={styles.googleIcon} // Style for the image
+        />
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.loginButton} onPress={() => navigation.navigate('Login')}>
+        <Text style={styles.loginText}>Already have an account? Login</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  background: {
+  container: {
     flex: 1,
     justifyContent: 'center',
-  },
-  container: { 
-    flex: 1, 
-    justifyContent: 'center', 
     padding: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 20,
-    margin: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    backgroundColor: '#B0B0B0',
   },
-  title: { 
-    fontSize: 32, 
-    marginBottom: 20, 
-    textAlign: 'center' 
+  logo: {
+    width: 100,
+    height: 100,
+    alignSelf: 'center',
+    marginBottom: 20,
+    resizeMode: 'contain',
   },
-  input: { 
-    borderWidth: 1, 
+  title: {
+    fontSize: 32,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  input: {
+    borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 5,
-    marginBottom: 10, 
     padding: 10,
     backgroundColor: 'white',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    marginBottom: 10,
   },
-  checkbox: { 
-    marginVertical: 10 
+  eyeIcon: {
+    position: 'absolute',
+    right: 15,
+    top: 10,
   },
+  dropdownContainer: {
+    height: 40,
+    marginBottom: 20,
+  },
+  dropdown: {
+    backgroundColor: 'white',
+    borderColor: '#ddd',
+  },
+  dropdownList: {
+    backgroundColor: 'white',
+  },
+  checkbox: {
+    marginVertical: 10,
+  },
+  checkboxText: {
+    fontSize: 14,
+    color: '#000',
+  },
+  checkboxLink: {
+    color: 'blue',
+    textDecorationLine: 'underline',
+    top: 5,
+  },
+  
   registerButton: {
-    backgroundColor: '#6495ED',
+    backgroundColor: '#005478',
     paddingVertical: 15,
     borderRadius: 10,
     alignItems: 'center',
     marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
   },
   registerButtonText: {
     color: 'white',
@@ -293,17 +315,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   googleButton: {
-    backgroundColor: '#db4437',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#48D1CC',
     paddingVertical: 15,
     borderRadius: 10,
-    alignItems: 'center',
     marginTop: 20,
   },
   googleButtonText: {
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
+    marginRight: 10,
   },
+  googleIcon: {
+    width: 45, // Adjust the size to fit the button
+    height: 41,
+    marginLeft: 5, // Adds spacing between the text and the icon
+  },
+  
   loginButton: {
     marginTop: 15,
     alignItems: 'center',

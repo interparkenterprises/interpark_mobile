@@ -5,6 +5,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { API_BASE_URL } from '@env';
 
+// Function to construct the CDN URL for images
+const getImageUrl = (filename) =>
+  `https://interparkenterprisespacebucket.blr1.cdn.digitaloceanspaces.com/Propertypic/${filename}`;
+
 const MyList = () => {
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,28 +20,40 @@ const MyList = () => {
     const fetchProperties = async () => {
       try {
         const storedUserId = await AsyncStorage.getItem('userId');
+        console.log('Stored User ID:', storedUserId); // Log to check if the userId is valid
+  
         if (storedUserId) {
           setAgentLandlordId(storedUserId);
-          const response = await axios.get(
-            `${API_BASE_URL}/properties/agent/${storedUserId}`
-          );
-          setProperties(response.data.properties);
+          const requestUrl = `${API_BASE_URL}/properties/agent/${storedUserId}`;
+          console.log('Requesting URL:', requestUrl); // Log the final URL to be sure it's correct
+  
+          const response = await axios.get(requestUrl);
+  
+          if (response.data.properties && response.data.properties.length === 0) {
+            // If no properties found, display the custom message
+            Alert.alert('No Properties', 'No Properties have been added yet');
+          } else {
+            setProperties(response.data.properties);
+          }
+        } else {
+          Alert.alert('Error', 'User ID not found');
         }
       } catch (error) {
-        console.error('Error fetching properties:', error);
-        Alert.alert('Error', 'Failed to load properties.');
+        //console.error('Error fetching properties:', error);
+        Alert.alert('No Properties', 'No Properties have been added yet');
       } finally {
         setLoading(false);
       }
     };
+  
     fetchProperties();
   }, []);
+  
+  
 
   const deleteImage = async (propertyId, imageName) => {
     try {
-      // Send delete request to the backend to delete the image
       await axios.delete(`${API_BASE_URL}/properties/images/${imageName}`);
-      // Update the local properties list by removing the deleted image
       setProperties((prevProperties) =>
         prevProperties.map((property) =>
           property._id.$oid === propertyId
@@ -58,7 +74,6 @@ const MyList = () => {
   const updateProperty = async (propertyId) => {
     if (!editingProperty) return;
     try {
-      // Perform the update operation
       await axios.put(
         `${API_BASE_URL}/properties/update/${agentLandlordId}/${propertyId}`,
         editingProperty
@@ -81,11 +96,10 @@ const MyList = () => {
         );
       }
 
-      // Update the local properties list by replacing the updated property
       setProperties((prevProperties) =>
         prevProperties.map((property) =>
           property._id.$oid === propertyId
-            ? { ...property, ...editingProperty }  // Update the property with the new data
+            ? { ...property, ...editingProperty }
             : property
         )
       );
@@ -101,7 +115,6 @@ const MyList = () => {
 
   const deleteProperty = async (propertyId) => {
     try {
-      // Assuming the API route includes agentLandlordId and propertyId
       await axios.delete(
         `${API_BASE_URL}/properties/delete/${agentLandlordId}/${propertyId}`
       );
@@ -134,7 +147,7 @@ const MyList = () => {
         {item.images.map((image, index) => (
           <View key={index} style={styles.imageWrapper}>
             <Image
-              source={{ uri: `https://interparkenterprises1001-gtuf6.ondigitalocean.app/uploads/Propertypic/${image}` }}
+              source={{ uri: getImageUrl(image) }}
               style={styles.image}
             />
             <TouchableOpacity
@@ -194,6 +207,9 @@ const MyList = () => {
       <Text style={styles.heading}>My Properties</Text>
       {loading ? (
         <Text>Loading properties...</Text>
+      ) : properties.length === 0 ? (
+        // Display message when there are no properties
+        <Text>No Properties have been added yet</Text>
       ) : (
         <FlatList
           data={properties}
@@ -215,6 +231,8 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
+    marginTop: 30,
+    color: 'white'
   },
   propertyCard: {
     marginBottom: 20,

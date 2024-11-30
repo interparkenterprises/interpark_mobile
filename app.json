@@ -15,7 +15,8 @@
       "@react-native-google-signin/google-signin"
     ],
     "assetBundlePatterns": [
-      "**/*"
+      "**/*",
+       "assets/fonts/*"
     ],
     "ios": {
       "supportsTablet": true,
@@ -26,7 +27,7 @@
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload property images.",
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["com.googleusercontent.apps.404388363961-hdt1e7t3ok9lgbd2biiqepmooign1n8k.apps.googleusercontent.com"]
+            "CFBundleURLSchemes": ["interpark"] 
           }
         ]
       }
@@ -46,10 +47,11 @@
       "intentFilters": [
         {
           "action": "VIEW",
-          "data": {
-            "scheme": "https",
-            "host": "auth.expo.io"
-          },
+          "data": [
+            {
+              "scheme": "interpark" 
+            }
+          ],
           "category": ["DEFAULT", "BROWSABLE"]
         }
       ]
@@ -65,11 +67,11 @@
       "googleClientIdIos": "404388363961-hdt1e7t3ok9lgbd2biiqepmooign1n8k.apps.googleusercontent.com",
       "googleClientIdAndroid": "404388363961-a1ei5i7bd0ajavteejs7dnlsinuenj7v.apps.googleusercontent.com"
     },
-    "scheme": "interpark",
+    "scheme": "interpark",  
     "newArchEnabled": true,
-    "devClient": true, 
+    "devClient": true,
     "notification": {
-      "icon": "./assets/adaptive-icon.png"  
+      "icon": "./assets/adaptive-icon.png"
     }
   }
 }

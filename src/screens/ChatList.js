@@ -144,17 +144,18 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         padding: 16,
-        backgroundColor: '#585858',
+        backgroundColor: '#58595b',
     },
     title: {
         fontSize: 24,
         color: '#fff',
         marginBottom: 16,
+        marginTop: 30,
     },
     searchInput: {
         height: 40,
-        backgroundColor: '#333',
-        color: '#fff',
+        backgroundColor: '#231F20',
+        color: '#ffffff',
         borderRadius: 8,
         paddingHorizontal: 10,
         marginBottom: 16,

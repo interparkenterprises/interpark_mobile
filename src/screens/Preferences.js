@@ -143,7 +143,7 @@ export default function Preferences() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#58595b',
     paddingTop: 20,
     paddingHorizontal: 10,
   },
@@ -152,6 +152,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 10,
+    marginTop: 30,
   },
   propertyCard: {
     marginBottom: 15,

@@ -7,18 +7,25 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
-  ImageBackground,
+  Image,
   ActivityIndicator,
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '@env';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 export default function Login({ navigation }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const animation = new Animated.Value(1);
+  const [isPasswordVisible, setPasswordVisible] = useState(false); // New state
+
+  // Function to toggle password visibility
+  const togglePasswordVisibility = () => {
+    setPasswordVisible(!isPasswordVisible);
+  };
 
   const handlePressIn = () => {
     Animated.spring(animation, {
@@ -108,90 +115,90 @@ export default function Login({ navigation }) {
   };
 
   return (
-    <ImageBackground
-      source={require('../../assets/House1.jpg')}
-      style={styles.background}
-      resizeMode="cover"
-    >
-      <View style={styles.container}>
-        <View style={styles.loginSection}>
-          <Text style={styles.welcomeText}>Welcome Back</Text>
+    <View style={styles.container}>
+      <Image source={require('../../assets/logo.png')} style={styles.logo} />
+      <Text style={styles.welcomeText}>Welcome Back</Text>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Username or Email"
-            placeholderTextColor="black"
-            value={username}
-            onChangeText={setUsername}
+      <TextInput
+        style={styles.input}
+        placeholder="Username or Email"
+        placeholderTextColor="black"
+        value={username}
+        onChangeText={setUsername}
+      />
+
+      <View style={{ position: 'relative' }}>
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor="black"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!isPasswordVisible} // Toggle secure entry
+        />
+        <TouchableOpacity
+          onPress={togglePasswordVisibility}
+          style={styles.eyeIcon}
+        >
+          <Icon
+            name={isPasswordVisible ? 'eye' : 'eye-off'}
+            size={24}
+            color="gray"
           />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="black"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-
-          <TouchableOpacity
-            onPress={() => navigation.navigate('ForgotPassword')}
-            style={styles.forgotPasswordLink}
-          >
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-          </TouchableOpacity>
-
-          {loading ? (
-            <ActivityIndicator size="large" color="#ffffff" style={styles.spinner} />
-          ) : (
-            <Animated.View style={{ transform: [{ scale: animation }] }}>
-              <TouchableOpacity
-                style={styles.loginButton}
-                onPressIn={handlePressIn}
-                onPressOut={handlePressOut}
-                onPress={handleLogin}
-              >
-                <Text style={styles.buttonText}>Login</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          )}
-
-          <TouchableOpacity
-            style={styles.registerButton}
-            onPress={() => navigation.navigate('Register')}
-          >
-            <Text style={styles.registerText}>Don't have an account? Register</Text>
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
       </View>
-    </ImageBackground>
+
+      <TouchableOpacity
+        onPress={() => navigation.navigate('ForgotPassword')}
+        style={styles.forgotPasswordLink}
+      >
+        <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+      </TouchableOpacity>
+
+      {loading ? (
+        <ActivityIndicator size="large" color="#ffffff" style={styles.spinner} />
+      ) : (
+        <Animated.View style={{ transform: [{ scale: animation }] }}>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            onPress={handleLogin}
+          >
+            <Text style={styles.buttonText}>Login</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      <TouchableOpacity
+        style={styles.registerButton}
+        onPress={() => navigation.navigate('Register')}
+      >
+        <Text style={styles.registerText}>Don't have an account? Register</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  background: {
-    flex: 1,
-    justifyContent: 'center',
-  },
   container: {
     flex: 1,
     justifyContent: 'center',
     padding: 20,
+    backgroundColor: '#B0B0B0',
   },
-  loginSection: {
-    backgroundColor: '#6495ED',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    borderBottomLeftRadius: 30,
-    padding: 20,
-    marginHorizontal: 10,
+  logo: {
+    width: 150,
+    height: 150,
+    alignSelf: 'center',
+    marginBottom: 30,
+    resizeMode: 'contain',
   },
   welcomeText: {
     fontSize: 24,
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 20,
-    color: 'white',
   },
   input: {
     borderWidth: 1,
@@ -200,6 +207,11 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
     backgroundColor: 'white',
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 15,
+    top: 10,
   },
   forgotPasswordLink: {
     alignSelf: 'flex-end',
@@ -210,7 +222,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   loginButton: {
-    backgroundColor: '#1E90FF',
+    backgroundColor: '#005478',
     paddingVertical: 15,
     borderRadius: 10,
     alignItems: 'center',
