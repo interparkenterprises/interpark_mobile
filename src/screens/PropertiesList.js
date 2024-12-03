@@ -3,9 +3,9 @@ import { View,Text,FlatList,Image,TouchableOpacity,StyleSheet, ActivityIndicator
   Dimensions, TextInput,} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import MapView, { PROVIDER_OSM, Marker } from 'react-native-maps';
+
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { API_BASE_URL, GEOCODING_API_KEY } from '@env';
+import { API_BASE_URL } from '@env';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
@@ -324,7 +324,12 @@ export default function PropertiesList() {
               <Text style={styles.infoHeading}>Nearby Places</Text>
               <Text style={styles.infoText}>{item.nearbyPlaces.join(', ')}</Text>
 
-              <MapViewComponent location={propertyLocation} />
+              <TouchableOpacity
+                onPress={() => navigation.navigate('MapPlace', { location: propertyLocation })}
+                style={styles.viewMapButton}
+              >
+                <Text style={styles.viewMapText}>View Map</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -398,70 +403,7 @@ export default function PropertiesList() {
   );
 }
 
-function MapViewComponent({ location }) {
-  const [coordinates, setCoordinates] = useState(null);
-  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchCoordinates = async () => {
-      try {
-        const coords = await getCoordinates(location);
-        if (coords) {
-          setCoordinates(coords);
-        } else {
-          setError('No results found for the specified location.');
-        }
-      } catch (e) {
-        setError('Failed to fetch coordinates.');
-      }
-    };
-    fetchCoordinates();
-  }, [location]);
-
-  const getCoordinates = async (location) => {
-    try {
-      const response = await axios.get('https://api.opencagedata.com/geocode/v1/json', {
-        params: {
-          q: location,
-          key: GEOCODING_API_KEY,
-        },
-      });
-
-      if (response.data.results.length > 0) {
-        const { geometry } = response.data.results[0];
-        return {
-          latitude: geometry.lat,
-          longitude: geometry.lng,
-        };
-      }
-      return null;
-    } catch (error) {
-      console.error('Error fetching coordinates:', error);
-      throw error;
-    }
-  };
-
-  if (error) {
-    return <Text style={styles.error}>{error}</Text>;
-  }
-
-  return coordinates ? (
-    <MapView
-      provider={PROVIDER_OSM} // Use OpenStreetMap as the provider
-      style={styles.map}
-      initialRegion={{
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      }}
-    >
-      <Marker coordinate={coordinates} title={location} />
-    </MapView>
-  ) : (
-    <Text style={styles.mapPlaceholder}>Loading Map...</Text>
-  );
-}
 
 
 // Define the styles
@@ -506,5 +448,7 @@ const styles = StyleSheet.create({
   fullscreenImage: { width, height: '100%' },
   closeButton: { position: 'absolute', top: 20, marginTop: 30, right: 20 },
   closeButtonText: { color: '#ffffff', fontSize: 18 },
+  viewMapButton: { marginTop: 10, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#005478', borderRadius: 8 },
+  viewMapText: { color: '#ffffff', fontSize: 16, textAlign: 'center' },
 });
 

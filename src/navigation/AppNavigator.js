@@ -14,6 +14,8 @@ import Preferences from '../screens/Preferences';
 import ChatRooms from '../screens/ChatRooms';
 import Profile from '../screens/Profile';
 import MyList from '../screens/MyList'; // Adjust the path if necessary
+import MapPlace from '../screens/MapPlace';
+
 
 
 
@@ -48,6 +50,7 @@ export default function AppNavigator() {
         
         {/* Add this screen to the stack navigator*/}
         <Stack.Screen name="MyList" component={MyList} />
+        <Stack.Screen name="MapPlace" component={MapPlace} />
       </Stack.Navigator>
     </NavigationContainer>
   );
