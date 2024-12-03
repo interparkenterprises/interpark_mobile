@@ -14,6 +14,12 @@ export default function MapPlace({ route }) {
   const navigation = useNavigation(); // Use the navigation hook
 
   useEffect(() => {
+    // Ensure location is passed and valid before attempting to fetch coordinates
+    if (!location) {
+      setError('No location provided');
+      return;
+    }
+
     const fetchCoordinates = async () => {
       try {
         const response = await axios.get('https://api.opencagedata.com/geocode/v1/json', {
@@ -22,6 +28,7 @@ export default function MapPlace({ route }) {
             key: GEOCODING_API_KEY,
           },
         });
+
         if (response.data.results.length > 0) {
           const { geometry } = response.data.results[0];
           setCoordinates({
@@ -35,11 +42,20 @@ export default function MapPlace({ route }) {
         setError('Failed to fetch coordinates.');
       }
     };
+
     fetchCoordinates();
   }, [location]);
 
+  // Return loading state or error message
   if (error) {
-    return <Text style={styles.error}>{error}</Text>;
+    return (
+      <View style={styles.container}>
+        <Text style={styles.error}>{error}</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.backButtonText}>Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   return (
@@ -76,6 +92,7 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+    marginTop: 30,
   },
   backButton: {
     position: 'absolute',
@@ -97,7 +114,7 @@ const styles = StyleSheet.create({
   },
   error: {
     textAlign: 'center',
-    marginTop: 20,
+    marginTop: 40,
     color: 'red',
   },
 });
