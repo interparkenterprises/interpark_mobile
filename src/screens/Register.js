@@ -205,12 +205,17 @@ export default function Register({ navigation }) {
         textComponent={
           <Text style={styles.checkboxText}>
             By continuing, you're accepting our{' '}
-            <TouchableOpacity onPress={() => Linking.openURL('https://your-terms-url.com')}>
+            <TouchableOpacity onPress={() => Linking.openURL('https://interparkenterprises.co.ke/terms-and-conditions/')}>
               <Text style={styles.checkboxLink}>terms of service</Text>
+            </TouchableOpacity>{' '}
+            and{' '}
+            <TouchableOpacity onPress={() => Linking.openURL('https://interparkenterprises.co.ke/privacy-policy/')}>
+              <Text style={styles.checkboxLink}>privacy policy</Text>
             </TouchableOpacity>.
           </Text>
         }
       />
+
 
 
       <Animated.View style={{ transform: [{ scale: animation }] }}>
