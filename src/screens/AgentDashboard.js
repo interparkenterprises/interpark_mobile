@@ -49,7 +49,7 @@ export default function AgentDashboard() {
 
           return <Icon name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: 'tomato',
+        tabBarActiveTintColor: '#005478',
         tabBarInactiveTintColor: 'gray',
         headerShown: false, // Hides the header for each screen
       })}

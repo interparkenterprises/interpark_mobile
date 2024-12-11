@@ -226,7 +226,7 @@ const ChatRoom = ({ route }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#585858',
+        backgroundColor: '#E0E0E0',
     },
     header: {
         backgroundColor: '#444444',
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
         borderRadius: 25,
     },
     sentMessage: {
-        backgroundColor: '#0078fe',
+        backgroundColor: '#005478',
         alignSelf: 'flex-end',
         padding: 10,
         borderRadius: 15,

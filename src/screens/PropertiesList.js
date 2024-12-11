@@ -282,7 +282,7 @@ export default function PropertiesList() {
             <Ionicons
               name={isFavorite ? 'heart' : 'heart-outline'}
               size={30}
-              color={isFavorite ? '#ffcc00' : '#ffffff'} // Orange when favorited
+              color={isFavorite ? '#005478' : '#ffffff'} // Orange when favorited
               style={styles.favoriteIcon}
             />
           </TouchableOpacity>
@@ -304,7 +304,7 @@ export default function PropertiesList() {
             <TouchableOpacity
               onPress={() => handleChatRoomNavigation(item._id.$oid, item.agentLandlordId.$oid)}
             >
-              <Ionicons name="chatbubbles-outline" size={25} color="#ffcc00" style={styles.messageIcon} />
+              <Ionicons name="chatbubbles-outline" size={25} color="#ffffff" style={styles.messageIcon} />
             </TouchableOpacity>
           )}
           
@@ -384,6 +384,10 @@ export default function PropertiesList() {
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             contentOffset={{ x: currentIndex * width }}
+            onMomentumScrollEnd={(event) => {
+              const index = Math.round(event.nativeEvent.contentOffset.x / width);
+              setCurrentIndex(index);
+            }}
           >
             {selectedImages.map((image, index) => (
               <Image
@@ -394,11 +398,26 @@ export default function PropertiesList() {
               />
             ))}
           </ScrollView>
+          
+          {/* Pagination Dots */}
+          <View style={styles.paginationContainer}>
+            {selectedImages.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.dot,
+                  index === currentIndex ? styles.activeDot : styles.inactiveDot,
+                ]}
+              />
+            ))}
+          </View>
+
           <TouchableOpacity onPress={() => setIsModalVisible(false)} style={styles.closeButton}>
             <Text style={styles.closeButtonText}>Close</Text>
           </TouchableOpacity>
         </View>
       </Modal>
+
     </View>
   );
 }
@@ -408,11 +427,11 @@ export default function PropertiesList() {
 
 // Define the styles
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#58595b' },
+  container: { flex: 1, backgroundColor: '#E0E0E0' },
   searchBar: { backgroundColor: '#231F20', color: '#ffffff', padding: 10, margin: 10,marginTop: 30, borderRadius: 8 },
   filterBar: { flexDirection: 'row', justifyContent: 'center', marginVertical: 10 },
   filterButton: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, backgroundColor: '#005478', marginHorizontal: 5 },
-  activeFilterButton: { backgroundColor: '#ffcc00' },
+  activeFilterButton: { backgroundColor: '#231f20' },
   filterText: { color: '#ffffff', fontSize: 14 },
   noResultsText: { color: '#ffffff', textAlign: 'center', marginTop: 20 },
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#231F20' },
@@ -435,7 +454,7 @@ const styles = StyleSheet.create({
   propertyTitle: { fontSize: 18, fontWeight: 'bold', color: '#ffffff' },
   locationContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
   propertyLocation: { color: '#cccccc', marginLeft: 5 },
-  propertyPrice: { fontSize: 16, fontWeight: 'bold', color: '#ffcc00', marginTop: 5 },
+  propertyPrice: { fontSize: 16, fontWeight: 'bold', color: '#ffffff', marginTop: 5 },
   propertyPurpose: { fontSize: 14, color: '#cccccc', marginTop: 5 },
   moreInfoContainer: { marginTop: 10, flexDirection: 'row', alignItems: 'center' },
   moreInfoText: { fontSize: 16, color: '#ffffff', textDecorationLine: 'underline' },
@@ -450,5 +469,27 @@ const styles = StyleSheet.create({
   closeButtonText: { color: '#ffffff', fontSize: 18 },
   viewMapButton: { marginTop: 10, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#005478', borderRadius: 8 },
   viewMapText: { color: '#ffffff', fontSize: 16, textAlign: 'center' },
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    bottom: 20,
+    width: '100%',
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginHorizontal: 5,
+    backgroundColor: '#005478',
+  },
+  activeDot: {
+    backgroundColor: 'white',
+  },
+  inactiveDot: {
+    backgroundColor: '#005478',
+  },
+  
 });
 

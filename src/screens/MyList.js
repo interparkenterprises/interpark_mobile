@@ -225,14 +225,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: '#585858',
+    backgroundColor: '#E0E0E0',
   },
   heading: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
     marginTop: 30,
-    color: 'white'
+    color: '#231f20'
   },
   propertyCard: {
     marginBottom: 20,

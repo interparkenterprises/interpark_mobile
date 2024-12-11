@@ -144,25 +144,25 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         padding: 16,
-        backgroundColor: '#58595b',
+        backgroundColor: '#E0E0E0',
     },
     title: {
         fontSize: 24,
-        color: '#fff',
+        color: '#231f20',
         marginBottom: 16,
         marginTop: 30,
     },
     searchInput: {
         height: 40,
         backgroundColor: '#231F20',
-        color: '#ffffff',
+        color: 'white',
         borderRadius: 8,
         paddingHorizontal: 10,
         marginBottom: 16,
     },
     chatRoom: {
         padding: 16,
-        backgroundColor: '#444',
+        backgroundColor: '#231f20',
         borderRadius: 8,
         marginBottom: 8,
     },
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     noChatRoomsText: {
-        color: '#fff',
+        color: '#231f20',
         textAlign: 'center',
         marginTop: 20,
     },

@@ -1,10 +1,11 @@
-// MapPlace.js
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import MapView, { Marker, PROVIDER_OSM } from 'react-native-maps';
+import MapboxGL from '@rnmapbox/maps';
 import axios from 'axios';
 import { GEOCODING_API_KEY } from '@env';
 import { useNavigation } from '@react-navigation/native';
+
+MapboxGL.setAccessToken('pk.eyJ1IjoiaW50ZXJwYXJrLWVudGVycHJpc2UiLCJhIjoiY200aXNzMmxyMDUxMDJpcXhlZHQ1cWxqZSJ9.Rjs3qDCMz3p42FMD1U2rFg'); // Set your Mapbox token here
 
 export default function MapPlace({ route }) {
   const { location } = route.params || {}; // Handle undefined params
@@ -14,7 +15,6 @@ export default function MapPlace({ route }) {
   const navigation = useNavigation(); // Use the navigation hook
 
   useEffect(() => {
-    // Ensure location is passed and valid before attempting to fetch coordinates
     if (!location) {
       setError('No location provided');
       return;
@@ -46,7 +46,6 @@ export default function MapPlace({ route }) {
     fetchCoordinates();
   }, [location]);
 
-  // Return loading state or error message
   if (error) {
     return (
       <View style={styles.container}>
@@ -60,24 +59,23 @@ export default function MapPlace({ route }) {
 
   return (
     <View style={styles.container}>
-      {/* Back Button */}
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
         <Text style={styles.backButtonText}>Back</Text>
       </TouchableOpacity>
 
       {coordinates ? (
-        <MapView
-          provider={PROVIDER_OSM}
-          style={styles.map}
-          initialRegion={{
-            latitude: coordinates.latitude,
-            longitude: coordinates.longitude,
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-          }}
-        >
-          <Marker coordinate={coordinates} title={location} />
-        </MapView>
+        <MapboxGL.MapView style={styles.map}>
+          <MapboxGL.Camera
+            centerCoordinate={[coordinates.longitude, coordinates.latitude]}
+            zoomLevel={14}
+          />
+          <MapboxGL.PointAnnotation
+            id="marker"
+            coordinate={[coordinates.longitude, coordinates.latitude]}
+          >
+            <View style={styles.marker} />
+          </MapboxGL.PointAnnotation>
+        </MapboxGL.MapView>
       ) : (
         <Text style={styles.loading}>Loading Map...</Text>
       )}
@@ -88,11 +86,10 @@ export default function MapPlace({ route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white', // Optional: for a white background
+    backgroundColor: 'white',
   },
   map: {
     flex: 1,
-    marginTop: 30,
   },
   backButton: {
     position: 'absolute',
@@ -101,7 +98,7 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: '#005478',
     borderRadius: 5,
-    zIndex: 1, // Ensure it stays on top of the map
+    zIndex: 1,
   },
   backButtonText: {
     color: 'white',
@@ -116,5 +113,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 40,
     color: 'red',
+  },
+  marker: {
+    height: 20,
+    width: 20,
+    backgroundColor: '#005478',
+    borderRadius: 10,
   },
 });

@@ -11,7 +11,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 const API_BASE_URL = 'https://interparkenterprises1001-gtuf6.ondigitalocean.app/api/favorites';
 
@@ -82,6 +82,14 @@ export default function Preferences() {
     fetchUserId();
   }, []);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      if (userId) {
+        fetchFavorites(userId); // Refresh favorites when the screen is focused
+      }
+    }, [userId])
+  );
+
   const handlePropertyClick = (property) => {
     navigation.navigate('PropertiesList', {
       propertyId: property._id.$oid, // Pass the property ID
@@ -109,7 +117,7 @@ export default function Preferences() {
               size={30}
               color={
                 favorites.some((fav) => fav.property._id.$oid === property._id.$oid)
-                  ? '#ff6600'
+                  ? '#005478'
                   : '#ccc'
               }
               style={styles.favoriteIcon}
@@ -143,14 +151,14 @@ export default function Preferences() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#58595b',
+    backgroundColor: '#E0E0E0',
     paddingTop: 20,
     paddingHorizontal: 10,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#ffffff',
+    color: '#231f20',
     marginBottom: 10,
     marginTop: 30,
   },
@@ -176,7 +184,7 @@ const styles = StyleSheet.create({
   },
   propertyPrice: {
     fontSize: 16,
-    color: '#ff6600',
+    color: '#ffffff',
   },
   favoriteIconContainer: {
     position: 'absolute',

@@ -11,15 +11,4 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
-# Keep classes for react-native-maps
--keep class com.google.android.gms.maps.** { *; }
--keep public class * extends com.google.android.gms.maps.** { *; }
--dontwarn com.google.android.gms.maps.**
-
-# If you are using other map libraries (e.g., OpenStreetMap), add rules to keep the relevant classes
-# Example for OpenCageData and map handling libraries:
--keep class com.mapbox.** { *; }
--keep class com.reactnativecommunity.** { *; }
--keep class com.airbnb.android.react.maps.** { *; }
-
-# Add any other project-specific keep options here
+# Add any project specific keep options here:

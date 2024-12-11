@@ -262,7 +262,7 @@ export default function Profile({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#585858',
+    backgroundColor: '#E0E0E0',
     alignItems: 'center',
     paddingTop: 80,
     paddingHorizontal: 16,
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   },
   info: {
     fontSize: 20,
-    color: '#ffffff',
+    color: '#231f20',
     marginVertical: 8,
     textAlign: 'center',
   },

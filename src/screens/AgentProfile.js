@@ -423,7 +423,7 @@ export default function AgentProfile() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#585858',
+    backgroundColor: '#E0E0E0',
     alignItems: 'center',
     paddingTop: 80,
     paddingHorizontal: 16,

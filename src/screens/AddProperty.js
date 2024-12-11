@@ -8,11 +8,36 @@ import axios from 'axios';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '@env';
+import DropDownPicker from 'react-native-dropdown-picker'; // Import DropDownPicker
+
 
 export default function AddProperty() {
     const [title, setTitle] = useState('');
     const [location, setLocation] = useState('');
     const [type, setType] = useState('');
+    const [items, setItems] = useState([ // Items for dropdown
+        { label: 'Apartment', value: 'Apartment' },
+        { label: 'Villa', value: 'Villa' },
+        { label: 'Mansion', value: 'Mansion' },
+        { label: 'Cottage', value: 'Cottage' },
+        { label: 'Townhouse', value: 'Townhouse' },
+        { label: 'Penthouse', value: 'Penthouse' },
+        { label: 'Studio', value: 'Studio' },
+        { label: 'Duplex', value: 'Duplex' },
+        { label: 'Bungalow', value: 'Bungalow' },
+        { label: 'Farmhouse', value: 'Farmhouse' },
+        { label: 'Loft', value: 'Loft' },
+        { label: 'Condo', value: 'Condo' },
+        { label: 'Mobile Home', value: 'Mobile Home' },
+        { label: 'Hotel', value: 'Hotel' },
+        { label: 'Warehouse', value: 'Warehouse' },
+        { label: 'Retail Space', value: 'Retail Space' },
+        { label: 'Office Space', value: 'Office Space' },
+        { label: 'Industrial', value: 'Industrial' },
+        { label: 'Commercial Property', value: 'Commercial Property' },
+        { label: 'Land', value: 'Land' },
+    ]);
+
     const [price, setPrice] = useState('');
     const [description, setDescription] = useState('');
     const [nearbyPlaces, setNearbyPlaces] = useState('');
@@ -22,6 +47,7 @@ export default function AddProperty() {
     const [purpose, setPurpose] = useState('BUY'); // Default purpose
     const navigation = useNavigation();
     const [isLoading, setIsLoading] = useState(false);
+    const [open, setOpen] = useState(false);
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -92,6 +118,14 @@ export default function AddProperty() {
     const handleSubmit = async () => {
         if (!userId || !authToken) {
             Alert.alert('Error', 'User authentication failed. Please log in again.');
+            return;
+        }
+        if (images.length < 5) {
+            Alert.alert('Error', 'Images uploaded are less than the required, please add more to submit.');
+            return;
+        }
+        if (images.length > 7) {
+            Alert.alert('Error', 'You have uploaded more than the allowed 7 images. Please remove some images.');
             return;
         }
     
@@ -165,7 +199,11 @@ export default function AddProperty() {
             style={{ flex: 1 }} 
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-            <ScrollView contentContainerStyle={styles.scrollContainer}>
+            <ScrollView 
+                contentContainerStyle={styles.scrollContainer}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+            >
                 <Text style={styles.title}>Add Property</Text>
                 <TextInput 
                     style={styles.input} 
@@ -181,13 +219,22 @@ export default function AddProperty() {
                     value={location} 
                     onChangeText={setLocation} 
                 />
-                <TextInput 
-                    style={styles.input} 
-                    placeholder="Type" 
-                    placeholderTextColor="#000" 
-                    value={type} 
-                    onChangeText={setType} 
+                
+                <DropDownPicker
+                    open={open}
+                    value={type}
+                    items={items}
+                    setOpen={setOpen}
+                    setValue={setType}
+                    setItems={setItems}
+                    placeholder="Select a property type"
+                    containerStyle={styles.dropdownContainer}
+                    style={styles.dropdown}
+                    dropDownContainerStyle={styles.dropdownList}
+                    listMode="SCROLLVIEW" // Use ScrollView instead of FlatList
+                    nestedScrollEnabled={true}
                 />
+
                 <TextInput 
                     style={styles.input} 
                     placeholder="Price" 
@@ -228,6 +275,10 @@ export default function AddProperty() {
                 <TouchableOpacity onPress={pickImage} style={styles.imageButton}>
                     <Text style={styles.buttonText}>Pick Images</Text>
                 </TouchableOpacity>
+                {/* Disclaimer Message */}
+                <Text style={styles.disclaimerText}>
+                    The number of images to be uploaded should be at least 5 and at most 7.
+                </Text>
                 <View style={styles.imagePreview}>
                     {images.map((imageUri, index) => (
                         <View key={index} style={styles.imageContainer}>
@@ -269,14 +320,14 @@ const styles = StyleSheet.create({
     scrollContainer: { 
         flexGrow: 1, 
         padding: 20, 
-        backgroundColor: '#585858' // Soft dark background color
+        backgroundColor: '#E0E0E0' // Soft dark background color
     },
     title: { 
         fontSize: 24, 
         fontWeight: 'bold', 
         marginBottom: 20, 
         marginTop: 30,
-        color: '#fff' 
+        color: '#231f20' 
     },
     input: { 
         borderWidth: 1, 
@@ -285,6 +336,26 @@ const styles = StyleSheet.create({
         marginBottom: 15, 
         padding: 10, 
         color: '#000' 
+    },
+    label: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 5,
+        color: '#231f20',
+    },
+    dropdownContainer: {
+        marginBottom: 15,
+        height: 40,
+    },
+    dropdown: {
+        borderWidth: 1,
+        borderColor: '#ccc',
+        borderRadius: 8,
+        paddingHorizontal: 10,
+    },
+    dropdownList: {
+        borderWidth: 1,
+        borderColor: '#ccc',
     },
     imageButton: { 
         backgroundColor: '#005478', 
@@ -330,6 +401,12 @@ const styles = StyleSheet.create({
         fontWeight: 'bold', 
         fontSize: 12 
     },
+    disclaimerText: {
+        color: '#FF0000', // Red color for emphasis
+        marginBottom: 10,
+        textAlign: 'center',
+        fontSize: 10,
+    },
     
     buttonContainer: { 
         padding: 10, 
@@ -365,7 +442,7 @@ const styles = StyleSheet.create({
         alignItems: 'center' 
     },
     checkboxText: { 
-        color: '#fff', 
+        color: '#231f20', 
         marginRight: 5 
     },
     checked: { 
