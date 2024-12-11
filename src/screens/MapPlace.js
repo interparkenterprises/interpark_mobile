@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import MapboxGL from '@rnmapbox/maps';
+import { WebView } from 'react-native-webview';
 import axios from 'axios';
 import { GEOCODING_API_KEY } from '@env';
 import { useNavigation } from '@react-navigation/native';
-
-MapboxGL.setAccessToken('pk.eyJ1IjoiaW50ZXJwYXJrLWVudGVycHJpc2UiLCJhIjoiY200aXNzMmxyMDUxMDJpcXhlZHQ1cWxqZSJ9.Rjs3qDCMz3p42FMD1U2rFg'); // Set your Mapbox token here
 
 export default function MapPlace({ route }) {
   const { location } = route.params || {}; // Handle undefined params
@@ -15,6 +13,7 @@ export default function MapPlace({ route }) {
   const navigation = useNavigation(); // Use the navigation hook
 
   useEffect(() => {
+    // Ensure location is passed and valid before attempting to fetch coordinates
     if (!location) {
       setError('No location provided');
       return;
@@ -46,6 +45,7 @@ export default function MapPlace({ route }) {
     fetchCoordinates();
   }, [location]);
 
+  // Return loading state or error message
   if (error) {
     return (
       <View style={styles.container}>
@@ -57,25 +57,52 @@ export default function MapPlace({ route }) {
     );
   }
 
+  // Generate the Leaflet map HTML
+  const generateMapHTML = () => {
+    if (coordinates) {
+      const { latitude, longitude } = coordinates;
+      return `
+        <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+            <style>
+              body { margin: 0; padding: 0; }
+              #map { height: 100vh; }
+            </style>
+          </head>
+          <body>
+            <div id="map"></div>
+            <script>
+              const map = L.map('map').setView([${latitude}, ${longitude}], 13);
+              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              }).addTo(map);
+              L.marker([${latitude}, ${longitude}]).addTo(map)
+                .bindPopup('<b>${location}</b>')
+                .openPopup();
+            </script>
+          </body>
+        </html>
+      `;
+    }
+    return '';
+  };
+
   return (
     <View style={styles.container}>
+      {/* Back Button */}
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
         <Text style={styles.backButtonText}>Back</Text>
       </TouchableOpacity>
 
       {coordinates ? (
-        <MapboxGL.MapView style={styles.map}>
-          <MapboxGL.Camera
-            centerCoordinate={[coordinates.longitude, coordinates.latitude]}
-            zoomLevel={14}
-          />
-          <MapboxGL.PointAnnotation
-            id="marker"
-            coordinate={[coordinates.longitude, coordinates.latitude]}
-          >
-            <View style={styles.marker} />
-          </MapboxGL.PointAnnotation>
-        </MapboxGL.MapView>
+        <WebView
+          originWhitelist={['*']}
+          source={{ html: generateMapHTML() }}
+          style={styles.map}
+        />
       ) : (
         <Text style={styles.loading}>Loading Map...</Text>
       )}
@@ -90,6 +117,7 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+    marginTop: 30,
   },
   backButton: {
     position: 'absolute',
@@ -98,7 +126,7 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: '#005478',
     borderRadius: 5,
-    zIndex: 1,
+    zIndex: 1, // Ensure it stays on top of the map
   },
   backButtonText: {
     color: 'white',
@@ -106,18 +134,12 @@ const styles = StyleSheet.create({
   },
   loading: {
     textAlign: 'center',
-    marginTop: 20,
+    marginTop: 50,
     fontSize: 16,
   },
   error: {
     textAlign: 'center',
     marginTop: 40,
     color: 'red',
-  },
-  marker: {
-    height: 20,
-    width: 20,
-    backgroundColor: '#005478',
-    borderRadius: 10,
   },
 });

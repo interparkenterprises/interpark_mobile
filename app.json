@@ -12,18 +12,11 @@
       "backgroundColor": "#ffffff"
     },
     "plugins": [
-      "@react-native-google-signin/google-signin",
-      [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoiaW50ZXJwYXJrLWVudGVycHJpc2UiLCJhIjoiY200amdyOGIzMGJoeDJxc2JqaW5rc25tayJ9.-TGoxnkA5EI3RBIoqqVm7w",
-          "RNMapboxMapsVersion": "11.0.0"
-        }
-      ]
+      "@react-native-google-signin/google-signin"
     ],
     "assetBundlePatterns": [
       "**/*",
-      "assets/fonts/*"
+       "assets/fonts/*"
     ],
     "ios": {
       "supportsTablet": true,
@@ -32,23 +25,19 @@
       "infoPlist": {
         "NSCameraUsageDescription": "This app needs access to the camera to upload property images.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload property images.",
-        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to show maps and navigation.",
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["interpark"]
+            "CFBundleURLSchemes": ["interpark"] 
           }
         ]
       }
     },
     "android": {
       "package": "com.interpark.realestate",
-      "versionCode": 1,
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "WRITE_EXTERNAL_STORAGE"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -59,7 +48,7 @@
           "action": "VIEW",
           "data": [
             {
-              "scheme": "interpark"
+              "scheme": "interpark" 
             }
           ],
           "category": ["DEFAULT", "BROWSABLE"]
@@ -77,7 +66,7 @@
       "googleClientIdIos": "404388363961-hdt1e7t3ok9lgbd2biiqepmooign1n8k.apps.googleusercontent.com",
       "googleClientIdAndroid": "404388363961-a1ei5i7bd0ajavteejs7dnlsinuenj7v.apps.googleusercontent.com"
     },
-    "scheme": "interpark",
+    "scheme": "interpark",  
     "newArchEnabled": true,
     "devClient": true,
     "notification": {
