@@ -15,24 +15,23 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '@env';
 import { useNavigation } from '@react-navigation/native';
-import { Asset } from 'expo-asset'; // Import expo-asset
-
+import { Asset } from 'expo-asset';
 
 export default function AgentProfile() {
   const [user, setUser] = useState(null);
   const [avatar, setAvatar] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [newUsername, setNewUsername] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [nationalIdOrPassport, setNationalIdOrPassport] = useState('');
   const [agentNumber, setAgentNumber] = useState('');
-  const navigation = useNavigation();
-  const [isSaving, setIsSaving] = useState(false); // New state to track saving state
+  const [fieldsLocked, setFieldsLocked] = useState(false);
 
+  const navigation = useNavigation();
 
   // Preload Avatar function
   const preloadAvatar = async (uri) => {
@@ -54,12 +53,11 @@ export default function AgentProfile() {
           setAvatar(parsedUser.avatar || null);
           setNewUsername(parsedUser.username || '');
 
-          // Preload the avatar if it's available
-          if (parsedUser?.avatar) {
+          if (parsedUser.avatar) {
             preloadAvatar(parsedUser.avatar);
           }
 
-          await fetchAgentProfile(parsedUser.id); // Fetch the agent profile details
+          await fetchAgentProfile(parsedUser.id);
         } else {
           console.warn('No user data found in AsyncStorage.');
         }
@@ -73,29 +71,33 @@ export default function AgentProfile() {
     fetchUserData();
 
     const backHandler = BackHandler.addEventListener('hardwareBackPress', handleExit);
-    return () => backHandler.remove(); // Cleanup on unmount
+    return () => backHandler.remove();
   }, []);
 
-  // Get Agent Profile info
+  // Fetch Agent Profile info
   const fetchAgentProfile = async (userId) => {
     try {
       const token = await AsyncStorage.getItem('auth_token');
       const response = await fetch(
-        `${API_BASE_URL}/auth/agent-profile/${userId}`,
+        `https://interpark-backend.onrender.com/api/auth/agent-profile/${userId}`,
         {
           method: 'GET',
           headers: {
-            Authorization: `Bearer ${token}`, // Include the token in the headers
+            Authorization: `Bearer ${token}`,
           },
         }
       );
-
       const data = await response.json();
       if (response.ok) {
         const { profile } = data;
         setPhoneNumber(profile.phoneNumber || '');
         setNationalIdOrPassport(profile.nationalIdOrPassport || '');
         setAgentNumber(profile.agentNumber || '');
+
+        // Lock fields if they were already set on the server
+        if (profile.nationalIdOrPassport && profile.agentNumber) {
+          setFieldsLocked(true);
+        }
       } else {
         throw new Error(data.error || 'Failed to fetch agent profile.');
       }
@@ -133,8 +135,6 @@ export default function AgentProfile() {
           } else {
             Alert.alert('Error', 'User ID not found.');
           }
-
-          // Preload the newly selected avatar
           preloadAvatar(uri);
         } else {
           Alert.alert('Error', 'The selected image is invalid or empty.');
@@ -154,11 +154,9 @@ export default function AgentProfile() {
         type: 'image/jpeg',
         name: `avatar-${Date.now()}.jpg`,
       });
-
       const token = await AsyncStorage.getItem('auth_token');
-
       const response = await fetch(
-        `${API_BASE_URL}/auth/upload-avatar/${user.id}`,
+        `https://interpark-backend.onrender.com/api/auth/upload-avatar/${user.id}`,
         {
           method: 'POST',
           headers: {
@@ -168,15 +166,12 @@ export default function AgentProfile() {
           body: formData,
         }
       );
-
       const data = await response.json();
       if (response.ok) {
         Alert.alert('Success', 'Avatar uploaded successfully!');
-        setUser((prevUser) => ({ ...prevUser, avatar: data.avatar }));
+        setUser((prev) => ({ ...prev, avatar: data.avatar }));
         setAvatar(data.avatar);
         await AsyncStorage.setItem('user', JSON.stringify({ ...user, avatar: data.avatar }));
-
-        // Preload the uploaded avatar
         preloadAvatar(data.avatar);
       } else {
         throw new Error(data.error || 'Failed to upload avatar.');
@@ -186,107 +181,81 @@ export default function AgentProfile() {
       Alert.alert('Error', error.message || 'An error occurred while uploading the avatar.');
     }
   };
+
   const validateFields = () => {
-    console.log('Validating fields...');
     if (!phoneNumber.trim() || !nationalIdOrPassport.trim() || !agentNumber.trim()) {
-      console.log('Validation failed: Missing required fields.');
       Alert.alert('Validation Error', 'All fields are required.');
       return false;
     }
-    console.log('Validation succeeded.');
     return true;
   };
 
   const handleSaveProfile = async () => {
-    console.log('Save Profile button clicked!');
-  
-    if (!validateFields()) {
-      console.log('Validation failed.');
-      return;
-    }
-    console.log('Validation passed.');
-  
-    setIsSaving(true); // Show activity indicator when saving starts
-  
+    if (!validateFields()) return;
+
+    setIsSaving(true);
     try {
       const token = await AsyncStorage.getItem('auth_token');
-      console.log('Retrieved Token:', token);
-  
       if (!token) {
-        console.log('No auth token found!');
         Alert.alert('Authentication Error', 'You are not authenticated.');
         setIsSaving(false);
         return;
       }
-  
       if (!user?.id) {
-        console.log('User ID is missing or invalid!');
         Alert.alert('Error', 'User ID is not found.');
         setIsSaving(false);
         return;
       }
-  
-      console.log('Making API call...');
-      console.log('API URL:', `${API_BASE_URL}/auth/agent-profile/${user.id}`);
-      console.log('Request Body:', { phoneNumber, nationalIdOrPassport, agentNumber });
-  
-      const response = await fetch(`${API_BASE_URL}/auth/agent-profile/${user.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ phoneNumber, nationalIdOrPassport, agentNumber }),
-      });
-  
+
+      const response = await fetch(
+        `https://interpark-backend.onrender.com/api/auth/agent-profile/${user.id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ phoneNumber, nationalIdOrPassport, agentNumber }),
+        }
+      );
       const data = await response.json();
-      console.log('Response Status:', response.status);
-      console.log('Response Data:', data);
-  
       if (response.ok) {
         Alert.alert('Success', 'Profile updated successfully!');
         setUser({ ...user, phoneNumber, nationalIdOrPassport, agentNumber });
-        await AsyncStorage.setItem('user', JSON.stringify({ ...user, phoneNumber, nationalIdOrPassport, agentNumber }));
+        await AsyncStorage.setItem(
+          'user',
+          JSON.stringify({ ...user, phoneNumber, nationalIdOrPassport, agentNumber })
+        );
         setIsEditing(false);
+
+        // _Lock_ both ID and agent fields from now on
+        setFieldsLocked(true);
       } else {
         throw new Error(data.error || 'Failed to update profile.');
       }
     } catch (error) {
-      console.error('Update Error:', error.message || error);
+      console.error('Update Error:', error);
       Alert.alert('Error', error.message || 'An error occurred while updating the profile.');
     } finally {
-      setIsSaving(false); // Hide activity indicator when operation finishes
+      setIsSaving(false);
     }
   };
-  
-  
-  
-  
 
   const handleLogout = async () => {
     try {
-      const token = await AsyncStorage.getItem('auth_token'); // Retrieve the auth token
-  
-      const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+      const token = await AsyncStorage.getItem('auth_token');
+      const response = await fetch(`https://interpark-backend.onrender.com/api/auth/logout`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
-  
       const data = await response.json();
-  
       if (response.ok) {
-        // Clear the AsyncStorage after successful logout
         await AsyncStorage.clear();
         Alert.alert('Logged Out', data.message);
-        setUser(null);
-        // Reset the navigation stack to the Login screen
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Login' }],
-        });
+        navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
       } else {
         Alert.alert('Logout Failed', data.error || 'An error occurred while logging out.');
       }
@@ -295,7 +264,7 @@ export default function AgentProfile() {
       Alert.alert('Error', 'An error occurred during logout.');
     }
   };
-  // Function to exit the app
+
   const handleExit = () => {
     Alert.alert(
       "Exit App",
@@ -304,18 +273,12 @@ export default function AgentProfile() {
         { text: "Cancel", style: "cancel" },
         {
           text: "Yes",
-          onPress: () => {
-            BackHandler.exitApp(); // Close the app gracefully
-          },
+          onPress: () => BackHandler.exitApp(),
         },
       ],
       { cancelable: true }
     );
   };
-  
-
-  
-  
 
   if (loading) {
     return (
@@ -336,15 +299,12 @@ export default function AgentProfile() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.myListContainer}>
-        <TouchableOpacity
-          style={styles.myListButton}
-          onPress={() => navigation.navigate('MyList')}
-        >
+        <TouchableOpacity style={styles.myListButton} onPress={() => navigation.navigate('MyList')}>
           <Icon name="list" size={24} color="#fff" />
           <Text style={styles.myListText}>My List</Text>
         </TouchableOpacity>
       </View>
-      
+
       <View style={styles.avatarContainer}>
         <Image
           source={{ uri: avatar || 'https://via.placeholder.com/180' }}
@@ -382,24 +342,48 @@ export default function AgentProfile() {
         placeholderTextColor="black"
         keyboardType="phone-pad"
       />
+
+      {/* National ID / Passport */}
+      <Text style={styles.fieldTitle}>National ID / Passport Number</Text>
       <TextInput
         value={nationalIdOrPassport}
         onChangeText={setNationalIdOrPassport}
-        style={styles.input}
-        placeholder="National ID / Passport Number"
+        style={[
+          styles.input,
+          fieldsLocked && { backgroundColor: '#e0e0e0' }
+        ]}
+        placeholder="Enter your National ID or Passport"
         placeholderTextColor="black"
+        editable={!fieldsLocked}
       />
+      {fieldsLocked && (
+        <Text style={styles.lockedFieldNote}>
+          This field cannot be edited after saving.
+        </Text>
+      )}
+
+      {/* Agent Registration Number */}
+      <Text style={styles.fieldTitle}>Agent Registration Number</Text>
       <TextInput
         value={agentNumber}
         onChangeText={setAgentNumber}
-        style={styles.input}
-        placeholder="Agent Registration Number"
+        style={[
+          styles.input,
+          fieldsLocked && { backgroundColor: '#e0e0e0' }
+        ]}
+        placeholder="Enter your Agent Registration Number"
         placeholderTextColor="black"
+        editable={!fieldsLocked}
       />
+      {fieldsLocked && (
+        <Text style={styles.lockedFieldNote}>
+          This field cannot be edited after saving.
+        </Text>
+      )}
 
       <TouchableOpacity
-        style={[styles.button, isSaving && { opacity: 0.6 }]} // Dim the button when loading
-        onPress={isSaving ? null : handleSaveProfile} // Disable button during save
+        style={[styles.button, isSaving && { opacity: 0.6 }]}
+        onPress={isSaving ? null : handleSaveProfile}
         disabled={isSaving}
       >
         {isSaving ? (
@@ -408,7 +392,6 @@ export default function AgentProfile() {
           <Text style={styles.buttonText}>Save Profile</Text>
         )}
       </TouchableOpacity>
-
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.buttonText}>Logout</Text>
@@ -430,9 +413,9 @@ const styles = StyleSheet.create({
   },
   myListContainer: {
     position: 'absolute',
-    top: 16, // Adjust the value to position it vertically
-    right: 16, // Adjust the value to position it horizontally
-    zIndex: 1, // Ensures the button appears above other elements
+    top: 16,
+    right: 16,
+    zIndex: 1,
   },
   myListButton: {
     flexDirection: 'row',
@@ -488,6 +471,21 @@ const styles = StyleSheet.create({
   info: {
     fontSize: 18,
     color: 'black',
+  },
+  fieldTitle: {
+    alignSelf: 'flex-start',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+    paddingLeft: 4,
+  },
+  lockedFieldNote: {
+    fontSize: 12,
+    color: 'gray',
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+    paddingLeft: 16,
   },
   button: {
     backgroundColor: '#005478',

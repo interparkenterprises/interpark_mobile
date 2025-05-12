@@ -16,7 +16,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import axios from 'axios';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';  // <-- Import Device from expo-device
-import { API_BASE_URL } from '@env';
+import { EXPO_PUBLIC_API_BASE_URL } from '@env';
 
 const ChatRoom = ({ route }) => {
     const navigation = useNavigation();
@@ -26,7 +26,7 @@ const ChatRoom = ({ route }) => {
     const [isProfileVisible, setIsProfileVisible] = useState(false);
     const animation = useState(new Animated.Value(0))[0];
 
-    const socket = io('https://interparkenterprises1001-gtuf6.ondigitalocean.app');
+    const socket = io('https://interpark-backend.onrender.com');
 
     useEffect(() => {
         const requestPermissions = async () => {
@@ -56,7 +56,7 @@ const ChatRoom = ({ route }) => {
 
         const fetchMessages = async () => {
             try {
-                const response = await axios.get(`${API_BASE_URL}/chat/${chatRoomId}/messages`);
+                const response = await axios.get(`https://interpark-backend.onrender.com/api/chat/${chatRoomId}/messages`);
                 setMessages(response.data.map((msg) => ({
                     _id: msg.id,
                     text: msg.content,
@@ -74,11 +74,11 @@ const ChatRoom = ({ route }) => {
                 let response;
                 if (userType === 'agent') {
                     if (!clientId) throw new Error('Invalid clientId');
-                    response = await axios.get(`${API_BASE_URL}/auth/client-profile/${clientId}`);
+                    response = await axios.get(`https://interpark-backend.onrender.com/api/auth/client-profile/${clientId}`);
                     setProfileInfo(response.data.profile);
                 } else {
                     if (!agentLandlordId) throw new Error('Invalid agentLandlordId');
-                    response = await axios.get(`${API_BASE_URL}/auth/agent-profile/${agentLandlordId}`);
+                    response = await axios.get(`https://interpark-backend.onrender.com/api/auth/agent-profile/${agentLandlordId}`);
                     setProfileInfo(response.data.profile);
                 }
             } catch (error) {
@@ -121,7 +121,7 @@ const ChatRoom = ({ route }) => {
         };
 
         try {
-            await axios.post(`${API_BASE_URL}/chat/send`, fullMessage);
+            await axios.post(`https://interpark-backend.onrender.com/api/chat/send`, fullMessage);
             socket.emit('send_message', fullMessage);
             setMessages((prevMessages) => GiftedChat.prepend(prevMessages, message));
         } catch (error) {

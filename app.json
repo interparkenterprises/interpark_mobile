@@ -11,12 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "plugins": [
-      "@react-native-google-signin/google-signin"
-    ],
     "assetBundlePatterns": [
       "**/*",
-       "assets/fonts/*"
+      "assets/fonts/*"
     ],
     "ios": {
       "supportsTablet": true,
@@ -27,7 +24,7 @@
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload property images.",
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["interpark"] 
+            "CFBundleURLSchemes": ["interpark"]
           }
         ]
       }
@@ -37,7 +34,8 @@
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "INTERNET"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -48,12 +46,13 @@
           "action": "VIEW",
           "data": [
             {
-              "scheme": "interpark" 
+              "scheme": "interpark"
             }
           ],
           "category": ["DEFAULT", "BROWSABLE"]
         }
-      ]
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -63,14 +62,25 @@
       "eas": {
         "projectId": "db6634eb-4587-4a79-bbd7-cc68a84471f5"
       },
-      "googleClientIdIos": "404388363961-hdt1e7t3ok9lgbd2biiqepmooign1n8k.apps.googleusercontent.com",
-      "googleClientIdAndroid": "404388363961-a1ei5i7bd0ajavteejs7dnlsinuenj7v.apps.googleusercontent.com"
+      "googleClientIdIos": "865590816188-fh0c7p79r1jj2es6cuqkqkoblltu7i3f.apps.googleusercontent.com",
+      "googleClientIdAndroid": "865590816188-ieupcun4rbinoe0csmjmvraf4sgen4mp.apps.googleusercontent.com",
+      "googleClientIdWeb": "865590816188-fh0c7p79r1jj2es6cuqkqkoblltu7i3f.apps.googleusercontent.com"
     },
-    "scheme": "interpark",  
-    "newArchEnabled": true,
-    "devClient": true,
+    "scheme": "interpark",
+    "newArchEnabled": false,
     "notification": {
       "icon": "./assets/adaptive-icon.png"
-    }
+    },
+    "plugins": [
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "googleServicesFile": "./google-services.json"
+          }
+        }
+      ]
+    ]
   }
 }

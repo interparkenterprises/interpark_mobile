@@ -3,11 +3,11 @@ import { View, Text, FlatList, Button, Image, TouchableOpacity, Alert, TextInput
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { API_BASE_URL } from '@env';
+import { EXPO_PUBLIC_API_BASE_URL } from '@env';
 
 // Function to construct the CDN URL for images
 const getImageUrl = (filename) =>
-  `https://interparkenterprisespacebucket.blr1.cdn.digitaloceanspaces.com/Propertypic/${filename}`;
+  `https://interpark-uploads.nyc3.cdn.digitaloceanspaces.com/Propertypic/${filename}`;
 
 const MyList = () => {
   const [properties, setProperties] = useState([]);
@@ -24,7 +24,7 @@ const MyList = () => {
   
         if (storedUserId) {
           setAgentLandlordId(storedUserId);
-          const requestUrl = `${API_BASE_URL}/properties/agent/${storedUserId}`;
+          const requestUrl = `https://interpark-backend.onrender.com/api/properties/agent/${storedUserId}`;
           console.log('Requesting URL:', requestUrl); // Log the final URL to be sure it's correct
   
           const response = await axios.get(requestUrl);
@@ -53,7 +53,7 @@ const MyList = () => {
 
   const deleteImage = async (propertyId, imageName) => {
     try {
-      await axios.delete(`${API_BASE_URL}/properties/images/${imageName}`);
+      await axios.delete(`https://interpark-backend.onrender.com/api/properties/images/${imageName}`);
       setProperties((prevProperties) =>
         prevProperties.map((property) =>
           property._id.$oid === propertyId
@@ -75,7 +75,7 @@ const MyList = () => {
     if (!editingProperty) return;
     try {
       await axios.put(
-        `${API_BASE_URL}/properties/update/${agentLandlordId}/${propertyId}`,
+        `https://interpark-backend.onrender.com/api/properties/update/${agentLandlordId}/${propertyId}`,
         editingProperty
       );
 
@@ -90,7 +90,7 @@ const MyList = () => {
         });
 
         await axios.put(
-          `${API_BASE_URL}/properties/${propertyId}/images`,
+          `https://interpark-backend.onrender.com/api/properties/${propertyId}/images`,
           formData,
           { headers: { 'Content-Type': 'multipart/form-data' } }
         );
@@ -116,7 +116,7 @@ const MyList = () => {
   const deleteProperty = async (propertyId) => {
     try {
       await axios.delete(
-        `${API_BASE_URL}/properties/delete/${agentLandlordId}/${propertyId}`
+        `https://interpark-backend.onrender.com/api/properties/delete/${agentLandlordId}/${propertyId}`
       );
       setProperties(properties.filter((property) => property._id.$oid !== propertyId));
       Alert.alert('Success', 'Property and related chat rooms deleted successfully!');

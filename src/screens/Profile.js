@@ -14,7 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons'; // Import Icons
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '@env';
+import { EXPO_PUBLIC_API_BASE_URL } from '@env';
 import { Asset } from 'expo-asset'; // Import expo-asset
 
 export default function Profile({ navigation }) {
@@ -113,7 +113,7 @@ export default function Profile({ navigation }) {
       const token = await AsyncStorage.getItem('auth_token');
 
       const response = await fetch(
-        `${API_BASE_URL}/auth/upload-avatar/${user.id}`,
+        `https://interpark-backend.onrender.com/api/auth/upload-avatar/${user.id}`,
         {
           method: 'POST',
           headers: {
@@ -152,7 +152,7 @@ export default function Profile({ navigation }) {
     try {
       const token = await AsyncStorage.getItem('auth_token'); // Retrieve the auth token
   
-      const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+      const response = await fetch(`https://interpark-backend.onrender.com/api/auth/logout`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

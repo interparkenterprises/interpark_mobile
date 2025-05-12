@@ -13,7 +13,7 @@ import axios from 'axios';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
-const API_BASE_URL = 'https://interparkenterprises1001-gtuf6.ondigitalocean.app/api/favorites';
+const EXPO_PUBLIC_API_BASE_URL ='https://interpark-backend.onrender.com/api/favorites';
 
 export default function Preferences() {
   const [favorites, setFavorites] = useState([]);
@@ -40,7 +40,7 @@ export default function Preferences() {
   const fetchFavorites = async (userId) => {
     setLoading(true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/${userId}`);
+      const response = await axios.get(`https://interpark-backend.onrender.com/api/${userId}`);
       setFavorites(response.data.favorites);
     } catch (error) {
       console.error('Error fetching favorites:', error);
@@ -60,7 +60,7 @@ export default function Preferences() {
 
       await axios({
         method,
-        url: `${API_BASE_URL}${endpoint}`,
+        url: `${EXPO_PUBLIC_API_BASE_URL}${endpoint}`,
         data: {
           userId,
           propertyId,

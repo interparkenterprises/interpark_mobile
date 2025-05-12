@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,111 +6,86 @@ import {
   Alert,
   StyleSheet,
   TouchableOpacity,
-  Animated,
   Image,
   ActivityIndicator,
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '@env';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
+import Constants from 'expo-constants';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import auth from '@react-native-firebase/auth';
+
+import { EXPO_PUBLIC_API_BASE_URL } from '@env';
 
 export default function Login({ navigation }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const animation = new Animated.Value(1);
-  const [isPasswordVisible, setPasswordVisible] = useState(false); // New state
+  const [isPasswordVisible, setPasswordVisible] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
-  // Function to toggle password visibility
-  const togglePasswordVisibility = () => {
-    setPasswordVisible(!isPasswordVisible);
-  };
+  useEffect(() => {
+    const { googleClientIdWeb, googleClientIdAndroid } = Constants.expoConfig.extra;
 
-  const handlePressIn = () => {
-    Animated.spring(animation, {
-      toValue: 0.95,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(animation, {
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const validateFields = () => {
-    if (!username || !password) {
-      Alert.alert('Validation Error', 'Both fields are required.');
-      return false;
-    }
-    return true;
-  };
-
-  const fetchUserChatRooms = async (userId) => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/chat/rooms/${userId}`);
-      const chatRooms = response.data || [];
-
-      const processedChatRooms = await Promise.all(
-        chatRooms.map(async (room) => ({
-          id: room.id,
-          clientId: room.clientId,
-          agentLandlordId: room.agentLandlordId,
-          propertyId: room.propertyId,
-        }))
-      );
-
-      await AsyncStorage.setItem('userChatRooms', JSON.stringify(processedChatRooms));
-    } catch (error) {
-      console.error('Error fetching chat rooms:', error);
-      Alert.alert('Error', 'Failed to load chat rooms.');
-    }
-  };
+    GoogleSignin.configure({
+      webClientId: googleClientIdWeb,
+      androidClientId: googleClientIdAndroid,
+      offlineAccess: true,
+    });
+  }, []);
 
   const handleLogin = async () => {
-    if (!validateFields()) return;
-
+    if (!username || !password) {
+      return Alert.alert('Error', 'Both fields are required');
+    }
     setLoading(true);
-
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/login`, {
-        username,
-        password,
-      });
-
-      const { token, user } = response.data;
-      const role = user.role;
-      const userId = user.id;
-      console.log(`Logged in user role: ${role}`);
-
-      await AsyncStorage.setItem('auth_token', token);
-      console.log('Bearer Token:', token);
-      await AsyncStorage.setItem('userId', userId);
-      await AsyncStorage.setItem('user_role', role);
-      await AsyncStorage.setItem('user', JSON.stringify(user));
-
-      await fetchUserChatRooms(userId);
-
-      if (role === 'AGENT_LANDLORD') {
-        navigation.replace('AgentDashboard');
-      } else if (role === 'CLIENT') {
-        navigation.replace('ClientDashboard');
-      } else {
-        Alert.alert('Login Failed', 'Invalid role detected.');
-      }
-
-      Alert.alert('Success', 'Login successful!');
-    } catch (error) {
-      console.error(error.response?.data || error.message);
-      Alert.alert(
-        'Login Failed',
-        error.response?.data?.error || 'Invalid credentials or network error.'
+      const { data } = await axios.post(
+        `https://interpark-backend.onrender.com/api/auth/login`,
+        { username, password }
       );
+      await AsyncStorage.setItem('auth_token', data.token);
+      await AsyncStorage.setItem('user', JSON.stringify(data.user));
+      await AsyncStorage.setItem('userId', data.user._id || data.user.id);
+      navigation.replace(
+        data.user.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard'
+      );
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Login Failed', err.response?.data?.error || err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const { idToken: googleIdToken } = await GoogleSignin.signIn();
+
+      const credential = auth.GoogleAuthProvider.credential(googleIdToken);
+      const userCredential = await auth().signInWithCredential(credential);
+      const firebaseIdToken = await userCredential.user.getIdToken();
+
+      const { data } = await axios.post(
+        `https://interpark-backend.onrender.com/api/auth/google`,
+        { idToken: firebaseIdToken }
+      );
+
+      await AsyncStorage.setItem('auth_token', data.token);
+      await AsyncStorage.setItem('user', JSON.stringify(data.user));
+      await AsyncStorage.setItem('userId', data.user._id || data.user.id);
+      navigation.replace(
+        data.user.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard'
+      );
+    } catch (err) {
+      console.error('Google Sign-In Error', err);
+      Alert.alert('Error', err.response?.data?.error || err.message);
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -125,19 +100,19 @@ export default function Login({ navigation }) {
         placeholderTextColor="black"
         value={username}
         onChangeText={setUsername}
+        autoCapitalize="none"
       />
-
-      <View style={{ position: 'relative' }}>
+      <View style={styles.passwordContainer}>
         <TextInput
-          style={styles.input}
+          style={styles.passwordInput}
           placeholder="Password"
           placeholderTextColor="black"
           value={password}
           onChangeText={setPassword}
-          secureTextEntry={!isPasswordVisible} // Toggle secure entry
+          secureTextEntry={!isPasswordVisible}
         />
         <TouchableOpacity
-          onPress={togglePasswordVisibility}
+          onPress={() => setPasswordVisible(!isPasswordVisible)}
           style={styles.eyeIcon}
         >
           <Icon
@@ -148,6 +123,7 @@ export default function Login({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* Forgot Password Link */}
       <TouchableOpacity
         onPress={() => navigation.navigate('ForgotPassword')}
         style={styles.forgotPasswordLink}
@@ -155,23 +131,36 @@ export default function Login({ navigation }) {
         <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
       </TouchableOpacity>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#ffffff" style={styles.spinner} />
-      ) : (
-        <Animated.View style={{ transform: [{ scale: animation }] }}>
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPressIn={handlePressIn}
-            onPressOut={handlePressOut}
-            onPress={handleLogin}
-          >
-            <Text style={styles.buttonText}>Login</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
+      <TouchableOpacity
+        style={styles.loginButton}
+        onPress={handleLogin}
+        disabled={loading}
+      >
+        {loading
+          ? <ActivityIndicator size="small" color="white" />
+          : <Text style={styles.buttonText}>Login</Text>
+        }
+      </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.registerButton}
+        style={styles.googleButton}
+        onPress={handleGoogleSignIn}
+        disabled={googleLoading}
+      >
+        {googleLoading
+          ? <ActivityIndicator size="small" color="white" />
+          : <>
+              <Text style={styles.googleButtonText}>Login with Google</Text>
+              <Image
+                source={require('../../assets/google-logo-icon.png')}
+                style={styles.googleIcon}
+              />
+            </>
+        }
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.registerLink}
         onPress={() => navigation.navigate('Register')}
       >
         <Text style={styles.registerText}>Don't have an account? Register</Text>
@@ -199,49 +188,81 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 20,
+    color: '#005478',
   },
   input: {
     borderWidth: 1,
     borderColor: '#ddd',
-    marginBottom: 10,
-    padding: 10,
     borderRadius: 8,
+    padding: 12,
     backgroundColor: 'white',
+    marginBottom: 15,
+    fontSize: 16,
+  },
+  passwordContainer: {
+    position: 'relative',
+    marginBottom: 5,
+  },
+  passwordInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: 'white',
+    fontSize: 16,
   },
   eyeIcon: {
     position: 'absolute',
     right: 15,
-    top: 10,
+    top: 12,
   },
   forgotPasswordLink: {
     alignSelf: 'flex-end',
-    marginBottom: 10,
+    marginBottom: 15,
   },
   forgotPasswordText: {
-    color: 'blue',
+    color: '#005478',
+    fontSize: 14,
     textDecorationLine: 'underline',
   },
   loginButton: {
     backgroundColor: '#005478',
     paddingVertical: 15,
-    borderRadius: 10,
+    borderRadius: 8,
     alignItems: 'center',
-    marginTop: 20,
+    marginBottom: 15,
+    elevation: 3,
   },
   buttonText: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
   },
-  spinner: {
-    marginTop: 20,
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4285F4',
+    paddingVertical: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+    elevation: 3,
   },
-  registerButton: {
-    marginTop: 15,
+  googleButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  googleIcon: {
+    width: 24,
+    height: 24,
+    marginLeft: 10,
+  },
+  registerLink: {
     alignItems: 'center',
   },
   registerText: {
-    color: 'blue',
+    color: '#005478',
     fontSize: 16,
     textDecorationLine: 'underline',
   },

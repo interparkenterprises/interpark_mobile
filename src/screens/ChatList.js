@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
 import io from 'socket.io-client';
-import { API_BASE_URL } from '@env';
+import { EXPO_PUBLIC_API_BASE_URL } from '@env';
 
 const ChatList = () => {
     const [chatRooms, setChatRooms] = useState([]);
@@ -12,7 +12,7 @@ const ChatList = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredChatRooms, setFilteredChatRooms] = useState([]);
     const navigation = useNavigation();
-    const socket = io(API_BASE_URL); // Use your server URL
+    const socket = io('https://interpark-backend.onrender.com/api'); // Use your server URL
 
     useEffect(() => {
         const loadChatRooms = async () => {
@@ -24,7 +24,7 @@ const ChatList = () => {
                     setFilteredChatRooms(parsedChatRooms);
                     await fetchPropertyTitles(parsedChatRooms);
                 } else {
-                    Alert.alert('No Chat Rooms', 'No chat rooms found.');
+                    //Alert.alert('No Chat Rooms', 'No chat rooms found.');
                 }
             } catch (error) {
                 console.error('Error loading chat rooms:', error);
@@ -59,7 +59,7 @@ const ChatList = () => {
     const fetchPropertyTitles = async (chatRooms) => {
         try {
             const propertyIds = chatRooms.map((room) => room.propertyId);
-            const response = await axios.post(`${API_BASE_URL}/properties/titles`, { propertyIds });
+            const response = await axios.post(`https://interpark-backend.onrender.com/api/properties/titles`, { propertyIds });
             const titles = response.data.titles;
 
             const propertyMap = {};
@@ -120,7 +120,7 @@ const ChatList = () => {
                 value={searchQuery}
                 onChangeText={setSearchQuery}
             />
-            <Button title="Refresh" onPress={refreshChatRooms} color="#ff6347" />
+            <Button title="Refresh" onPress={refreshChatRooms} color="#005478" />
             {filteredChatRooms.length === 0 ? (
                 <Text style={styles.noChatRoomsText}>No chat rooms available.</Text>
             ) : (

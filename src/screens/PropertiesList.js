@@ -29,7 +29,7 @@ export default function PropertiesList() {
   const { propertyId } = route.params || {};
 
   const getImageUrl = (filename) =>
-    `https://interparkenterprisespacebucket.blr1.cdn.digitaloceanspaces.com/Propertypic/${filename}`;
+    `https://interpark-uploads.nyc3.cdn.digitaloceanspaces.com/Propertypic/${filename}`;
 
   const fetchProperties = async (isRefresh = false) => {
     if (isRefresh) setIsRefreshing(true);
@@ -37,7 +37,7 @@ export default function PropertiesList() {
 
     try {
       const token = await AsyncStorage.getItem('auth_token');
-      const response = await fetch(`${API_BASE_URL}/properties/`, {
+      const response = await fetch(`https://interpark-backend.onrender.com/api/properties/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -115,7 +115,7 @@ export default function PropertiesList() {
       // Make the API request
       const response = await axios({
         method,
-        url: `${API_BASE_URL}${endpoint}`,
+        url: `https://interpark-backend.onrender.com/api${endpoint}`,
         data: { userId, propertyId },
       });
   
@@ -135,7 +135,7 @@ export default function PropertiesList() {
 
   const fetchFavorites = async (userId) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/favorites/${userId}`);
+      const response = await axios.get(`https://interpark-backend.onrender.com/api/favorites/${userId}`);
       setFavorites(response.data.favorites || []);
     } catch (error) {
       //console.error('Error fetching favorites:', error);
@@ -186,7 +186,7 @@ export default function PropertiesList() {
     const clientId = await AsyncStorage.getItem('userId'); // Retrieve client ID from AsyncStorage
 
     try {
-        const response = await axios.post(`${API_BASE_URL}/chat/create`, {
+        const response = await axios.post(`https://interpark-backend.onrender.com/api/chat/create`, {
             propertyId: String(propertyId),
             agentLandlordId:  String(agentLandlordId), // Ensure it's a string
             clientId: String(clientId),

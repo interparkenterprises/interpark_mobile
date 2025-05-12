@@ -1,156 +1,168 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, Alert, StyleSheet, Animated, TouchableOpacity, Image, ActivityIndicator,
-  Linking
- } from 'react-native';
+// Register.js
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  Alert,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
+  Linking,
+} from 'react-native';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DropDownPicker from 'react-native-dropdown-picker';
 import BouncyCheckbox from 'react-native-bouncy-checkbox';
-import { useFonts } from 'expo-font';
-import { API_BASE_URL } from '@env';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
-import { makeRedirectUri } from 'expo-auth-session';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons'; // Import the icon library
-//import AsyncStorage from '@react-native-async-storage/async-storage';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-WebBrowser.maybeCompleteAuthSession();
+import Constants from 'expo-constants';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import auth from '@react-native-firebase/auth';
+
+import { EXPO_PUBLIC_API_BASE_URL } from '@env';
 
 export default function Register({ navigation }) {
-  const [email, setEmail] = useState('');
+  // Manual form state
+  const [email, setEmail]       = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [secureTextEntry, setSecureTextEntry] = useState(true); // Controls password visibility
-  const [role, setRole] = useState(''); // Selected role
-  const [open, setOpen] = useState(false); // Controls dropdown visibility
-  const [items, setItems] = useState([
-    { label: 'Register as Client', value: 'CLIENT' },
-    { label: 'Register as Agent', value: 'AGENT_LANDLORD' },
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [secureTextEntry, setSecureTextEntry] = useState(true);
+
+  // Role dropdown
+  const [role, setRole]         = useState('');
+  const [open, setOpen]         = useState(false);
+  const [items, setItems]       = useState([
+    { label: 'Register as a Client',        value: 'CLIENT' },
+    { label: 'Register as an Agent/Landlord', value: 'AGENT_LANDLORD' },
   ]);
-  const [isTermsChecked, setTermsChecked] = useState(false);
-  const [loading, setLoading] = useState(false);
 
-  
+  const [isTermsChecked, setTermsChecked]   = useState(false);
+  const [loading, setLoading]               = useState(false);
+  const [googleLoading, setGoogleLoading]   = useState(false);
 
+  // --- Configure Google Sign-In once ---
+  useEffect(() => {
+    const { googleClientIdWeb, googleClientIdAndroid } = Constants.expoConfig.extra;
 
-  const animation = useRef(new Animated.Value(1)).current;
+    GoogleSignin.configure({
+      webClientId: googleClientIdWeb,
+      androidClientId: googleClientIdAndroid,
+      offlineAccess: true,
+    });
+  }, []);
 
-  // Set up Google Sign-In with dynamic redirectUri
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    iosClientId: '404388363961-hdt1e7t3ok9lgbd2biiqepmooign1n8k.apps.googleusercontent.com',
-    androidClientId: '404388363961-a1ei5i7bd0ajavteejs7dnlsinuenj7v.apps.googleusercontent.com',
-    redirectUri: makeRedirectUri({ useProxy: true }), // Automatically handles redirect URI    
-  });
-  
-
-
-  // Handle the Google Sign-In response
-  React.useEffect(() => {
-    if (response?.type === 'success') {
-      const { authentication } = response;
-      handleGoogleSignIn(authentication.accessToken);
-    }
-  }, [response]);
-
-  // Function to handle Google Sign-In
-  const handleGoogleSignIn = async (accessToken) => {
-    try {
-      // Get user information from Google
-      const userInfoResponse = await fetch('https://www.googleapis.com/userinfo/v2/me', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const userInfo = await userInfoResponse.json();
-
-      // Register the user on your backend
-      await axios.post(`${API_BASE_URL}/auth/register`, {
-        email: userInfo.email,
-        username: userInfo.name,
-        role,
-        googleId: userInfo.id, // Pass the Google ID here
-        avatar: userInfo.picture, // Optionally pass the Google avatar
-      });
-
-      Alert.alert('Registration Successful', 'You can now log in');
-      navigation.navigate('Login');
-    } catch (error) {
-      console.error('Google Sign-In error:', error);
-      Alert.alert('Registration Failed', 'Please try again');
-    }
-  };
-
-  // Function to validate email format
-  const validateEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  // Function to validate inputs
+  // --- Manual Registration ---
+  const validateEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
   const validateInputs = () => {
-    if (!email.trim() || !username.trim() || !password.trim()) {
+    if (!email.trim() || !username.trim() || !password.trim() || !confirmPassword.trim()) {
       Alert.alert('Error', 'All fields are required!');
       return false;
     }
     if (!validateEmail(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      Alert.alert('Error', 'Please enter a valid email');
       return false;
     }
-
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return false;
+    }
     if (!isTermsChecked) {
-      Alert.alert('Error', 'Accept and check the terms and conditions in order to register.');
+      Alert.alert('Error', 'You must accept the terms');
       return false;
     }
     return true;
   };
 
   const handleRegister = async () => {
-    if (!validateInputs()) return;
-
-    setLoading(true); // Start loading
-
+    if (!validateInputs() || !role) {
+      if (!role) Alert.alert('Error', 'Please select your role');
+      return;
+    }
+    setLoading(true);
     try {
-        // Step 1: Check if the email or username already exists
-        const checkResponse = await axios.post(`${API_BASE_URL}/auth/verify-user`, {
-            email,
-            username,
-        });
-
-        if (checkResponse.data.exists) {
-            Alert.alert('Registration Failed', 'The User already exists');
-            setLoading(false); // Stop loading
-            return;
-        }
-
-        // Step 2: Proceed with registration
-        await axios.post(`${API_BASE_URL}/auth/register`, {
-            email,
-            username,
-            password,
-            role,
-        });
-
-        Alert.alert('Registration Successful', 'Please check your email to confirm your email address before logging in.');
-        setLoading(false); // Stop loading
-        navigation.navigate('Login');
-    } catch (error) {
-        console.error(error.response?.data || error.message);
-        Alert.alert('Registration Failed', 'Please try again');
-        setLoading(false); // Stop loading
+      // Check existence
+      const { data: check } = await axios.post(
+        `https://interpark-backend.onrender.com/api/auth/verify-user`,
+        { email, username }
+      );
+      if (check.exists) {
+        Alert.alert('Registration Failed', 'User already exists');
+        setLoading(false);
+        return;
+      }
+      // Register
+      await axios.post(
+        `https://interpark-backend.onrender.com/api/auth/register`,
+        { username, email, password, role }
+      );
+      Alert.alert(
+        'Registration Successful',
+        'Please check your email to confirm before logging in'
+      );
+      navigation.navigate('Login');
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Registration Failed', err.response?.data?.error || err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
+  // --- Google Registration/Login ---
+  const handleGoogleSignIn = async () => {
+    if (!role) {
+      return Alert.alert('Error', 'Please select your role first');
+    }
+    setGoogleLoading(true);
+    try {
+      // 1. Launch native Google Sign-In
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const { idToken: googleIdToken } = await GoogleSignin.signIn();
 
+      // 2. Create a Firebase credential with the token
+      const credential = auth.GoogleAuthProvider.credential(googleIdToken);
+      const userCredential = await auth().signInWithCredential(credential);
 
+      // 3. Get the Firebase ID token
+      const firebaseIdToken = await userCredential.user.getIdToken();
+
+      // 4. Send it to your backend
+      const { data } = await axios.post(
+        `https://interpark-backend.onrender.com/api/auth/google`,
+        { idToken: firebaseIdToken, role }
+      );
+
+      // 5. Store your JWT & user, navigate
+      await AsyncStorage.setItem('auth_token', data.token);
+      await AsyncStorage.setItem('user', JSON.stringify(data.user));
+      navigation.replace(
+        data.user.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard'
+      );
+    } catch (err) {
+      console.error('Google Sign-In Error', err);
+      Alert.alert('Error', err.response?.data?.error || err.message);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <Image source={require('../../assets/logo.png')} style={styles.logo} />
       <Text style={styles.title}>Register</Text>
 
+      {/* Manual Fields */}
       <TextInput
         style={styles.input}
         placeholder="Email"
         placeholderTextColor="black"
         value={email}
         onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
       />
       <TextInput
         style={styles.input}
@@ -158,10 +170,11 @@ export default function Register({ navigation }) {
         placeholderTextColor="black"
         value={username}
         onChangeText={setUsername}
+        autoCapitalize="none"
       />
-      <View style={{ position: 'relative' }}>
+      <View style={styles.passwordContainer}>
         <TextInput
-          style={styles.input}
+          style={styles.passwordInput}
           placeholder="Password"
           placeholderTextColor="black"
           value={password}
@@ -175,8 +188,32 @@ export default function Register({ navigation }) {
           <Icon name={secureTextEntry ? 'eye-off' : 'eye'} size={24} color="gray" />
         </TouchableOpacity>
       </View>
+      
+      {/* Confirm Password Field with error styling */}
+      <View style={[
+        styles.passwordContainer, 
+        password && confirmPassword && password !== confirmPassword && styles.errorContainer
+      ]}>
+        <TextInput
+          style={[
+            styles.passwordInput,
+            password && confirmPassword && password !== confirmPassword && styles.errorInput
+          ]}
+          placeholder="Confirm Password"
+          placeholderTextColor={password && confirmPassword && password !== confirmPassword ? 'red' : 'black'}
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          secureTextEntry={secureTextEntry}
+        />
+        <TouchableOpacity
+          style={styles.eyeIcon}
+          onPress={() => setSecureTextEntry(!secureTextEntry)}
+        >
+          <Icon name={secureTextEntry ? 'eye-off' : 'eye'} size={24} color="gray" />
+        </TouchableOpacity>
+      </View>
 
-      {/* Dropdown for Role Selection */}
+      {/* Role Picker */}
       <DropDownPicker
         open={open}
         value={role}
@@ -184,19 +221,18 @@ export default function Register({ navigation }) {
         setOpen={setOpen}
         setValue={setRole}
         setItems={setItems}
-        placeholder="Select a role"
+        placeholder="Select your role"
         containerStyle={styles.dropdownContainer}
         style={styles.dropdown}
         dropDownContainerStyle={styles.dropdownList}
       />
 
-      
-      {/* Terms and Conditions Checkbox */}
+      {/* Terms */}
       <BouncyCheckbox
         size={25}
-        fillColor="green"
+        fillColor="#005478"
         unfillColor="#FFFFFF"
-        iconStyle={{ borderColor: 'green' }}
+        iconStyle={{ borderColor: '#005478' }}
         innerIconStyle={{ borderWidth: 2 }}
         isChecked={isTermsChecked}
         disableBuiltInState
@@ -204,47 +240,59 @@ export default function Register({ navigation }) {
         style={styles.checkbox}
         textComponent={
           <Text style={styles.checkboxText}>
-            By continuing, you're accepting our{' '}
-            <TouchableOpacity onPress={() => Linking.openURL('https://interparkenterprises.co.ke/terms-and-conditions/')}>
-              <Text style={styles.checkboxLink}>terms of service</Text>
-            </TouchableOpacity>{' '}
+            I agree to the{' '}
+            <Text
+              style={styles.checkboxLink}
+              onPress={() => Linking.openURL('https://interparkenterprises.co.ke/terms-and-conditions/')}
+            >
+              Terms
+            </Text>{' '}
             and{' '}
-            <TouchableOpacity onPress={() => Linking.openURL('https://interparkenterprises.co.ke/privacy-policy/')}>
-              <Text style={styles.checkboxLink}>privacy policy</Text>
-            </TouchableOpacity>.
+            <Text
+              style={styles.checkboxLink}
+              onPress={() => Linking.openURL('https://interparkenterprises.co.ke/privacy-policy/')}
+            >
+              Privacy Policy
+            </Text>
           </Text>
         }
       />
 
-
-
-      <Animated.View style={{ transform: [{ scale: animation }] }}>
-        <TouchableOpacity
-          style={styles.registerButton}
-          onPress={handleRegister}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator size="small" color="white" />
-          ) : (
-            <Text style={styles.registerButtonText}>Register</Text>
-          )}
-        </TouchableOpacity>
-      </Animated.View>
-
+      {/* Manual Register */}
       <TouchableOpacity
-        style={styles.googleButton}
-        onPress={() => promptAsync()}
-        disabled={loading || !request}
+        style={styles.registerButton}
+        onPress={handleRegister}
+        disabled={loading || !role}
       >
-        <Text style={styles.googleButtonText}>Register with </Text>
-        <Image
-          source={require('../../assets/google-logo-icon.png')}
-          style={styles.googleIcon} // Style for the image
-        />
+        {loading
+          ? <ActivityIndicator size="small" color="white" />
+          : <Text style={styles.registerButtonText}>Register</Text>
+        }
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.loginButton} onPress={() => navigation.navigate('Login')}>
+      {/* Google Register */}
+      <TouchableOpacity
+        style={styles.googleButton}
+        onPress={handleGoogleSignIn}
+        disabled={googleLoading || !role}
+      >
+        {googleLoading
+          ? <ActivityIndicator size="small" color="white" />
+          : <>
+              <Text style={styles.googleButtonText}>Register with</Text>
+              <Image
+                source={require('../../assets/google-logo-icon.png')}
+                style={styles.googleIcon}
+              />
+            </>
+        }
+      </TouchableOpacity>
+
+      {/* Go to Login */}
+      <TouchableOpacity
+        style={styles.loginButton}
+        onPress={() => navigation.navigate('Login')}
+      >
         <Text style={styles.loginText}>Already have an account? Login</Text>
       </TouchableOpacity>
     </View>
@@ -266,87 +314,111 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
   },
   title: {
-    fontSize: 32,
+    fontSize: 24,
+    fontWeight: 'bold',
     marginBottom: 20,
     textAlign: 'center',
+    color: '#005478',
   },
   input: {
     borderWidth: 1,
     borderColor: '#ddd',
-    borderRadius: 5,
-    padding: 10,
+    borderRadius: 8,
+    padding: 12,
     backgroundColor: 'white',
-    marginBottom: 10,
+    marginBottom: 15,
+    fontSize: 16,
+  },
+  passwordContainer: {
+    position: 'relative',
+    marginBottom: 15,
+  },
+  passwordInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: 'white',
+    fontSize: 16,
   },
   eyeIcon: {
     position: 'absolute',
     right: 15,
-    top: 10,
+    top: 12,
   },
   dropdownContainer: {
-    height: 40,
-    marginBottom: 20,
+    marginBottom: 15,
   },
   dropdown: {
     backgroundColor: 'white',
     borderColor: '#ddd',
+    borderRadius: 8,
   },
   dropdownList: {
     backgroundColor: 'white',
+    borderColor: '#ddd',
   },
   checkbox: {
     marginVertical: 10,
+    alignSelf: 'flex-start',
   },
   checkboxText: {
     fontSize: 14,
-    color: '#000',
+    color: '#333',
   },
   checkboxLink: {
-    color: 'blue',
+    color: '#005478',
     textDecorationLine: 'underline',
-    top: 5,
   },
-  
   registerButton: {
     backgroundColor: '#005478',
     paddingVertical: 15,
-    borderRadius: 10,
+    borderRadius: 8,
     alignItems: 'center',
     marginTop: 20,
+    elevation: 3,
   },
   registerButtonText: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#48D1CC',
+    backgroundColor: '#4285F4',
     paddingVertical: 15,
-    borderRadius: 10,
-    marginTop: 20,
+    borderRadius: 8,
+    marginTop: 15,
+    elevation: 3,
   },
   googleButtonText: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    marginRight: 10,
   },
   googleIcon: {
-    width: 45, // Adjust the size to fit the button
-    height: 41,
-    marginLeft: 5, // Adds spacing between the text and the icon
+    width: 24,
+    height: 24,
+    marginLeft: 10,
   },
-  
   loginButton: {
-    marginTop: 15,
+    marginTop: 20,
     alignItems: 'center',
   },
   loginText: {
-    color: 'blue',
+    color: '#005478',
     fontSize: 16,
     textDecorationLine: 'underline',
   },
+
+  errorContainer: {
+  borderColor: 'red',
+  borderRadius: 8,
+  },
+  errorInput: {
+    borderColor: 'red',
+  },
+  
 });

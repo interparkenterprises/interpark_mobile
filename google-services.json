@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "865590816188",
+    "project_id": "interparkenterprises-88462",
+    "storage_bucket": "interparkenterprises-88462.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:865590816188:android:ff69153f22213fd9d44fb9",
+        "android_client_info": {
+          "package_name": "com.interpark.realestate"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "865590816188-ieupcun4rbinoe0csmjmvraf4sgen4mp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.interpark.realestate",
+            "certificate_hash": "f62a7a5c485b2824816cea474d818981f8d21861"
+          }
+        },
+        {
+          "client_id": "865590816188-fh0c7p79r1jj2es6cuqkqkoblltu7i3f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBFmHZ2BIFpAFzPeNTm0Y8rC65vd-wBtQ0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "865590816188-fh0c7p79r1jj2es6cuqkqkoblltu7i3f.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

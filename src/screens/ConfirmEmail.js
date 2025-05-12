@@ -8,7 +8,7 @@ const ConfirmEmail = ({ route, navigation }) => {
   useEffect(() => {
     const confirmEmail = async () => {
       try {
-        const response = await axios.get(`https://interparkenterprises1001-gtuf6.ondigitalocean.app/api/auth/confirm-email/${token}`);
+        const response = await axios.get(`https://interpark-backend.onrender.com/api/auth/confirm-email/${token}`);
         Alert.alert('Success', response.data.message);
         navigation.navigate('Login'); // Redirect to login after success
       } catch (error) {

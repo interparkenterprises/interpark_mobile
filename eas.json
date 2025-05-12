@@ -6,17 +6,25 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://10.0.2.2:8000/api",
+        "GEOCODING_API_KEY": "4ffae60464eb4730a352c90f9cefd35c"
+      }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://interpark-backend.onrender.com/api",
+        "GEOCODING_API_KEY": "4ffae60464eb4730a352c90f9cefd35c"
+      }
     },
     "production": {
       "autoIncrement": true,
       "distribution": "store",
       "env": {
-        "API_BASE_URL": "https://interparkenterprises1001-gtuf6.ondigitalocean.app/api",
-        "GEOCODING_API_KEY": "5e5f18bb72374cb3b6d32306f3174bc7"
+        "EXPO_PUBLIC_API_BASE_URL": "https://interpark-backend.onrender.com/api",
+        "GEOCODING_API_KEY": "4ffae60464eb4730a352c90f9cefd35c"
       }
     }
   },

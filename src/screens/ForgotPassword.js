@@ -1,47 +1,81 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Alert, StyleSheet, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  Alert,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import axios from 'axios';
-import { API_BASE_URL } from '@env';
+import { EXPO_PUBLIC_API_BASE_URL } from '@env';
 
 export default function ForgotPassword({ navigation }) {
-  const [emailOrUsername, setEmailOrUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handlePasswordReset = async () => {
-    if (!emailOrUsername) {
-      Alert.alert('Validation Error', 'Please enter your email or username.');
+    // simple empty check
+    if (!email.trim()) {
+      Alert.alert('Validation Error', 'Please enter your email address.');
       return;
     }
 
+    setLoading(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/forgot-password`, {
-        emailOrUsername,
-      });
-      Alert.alert('Success', 'Password reset link sent! Check your email.');
+      await axios.post(
+        `https://interpark-backend.onrender.com/api/auth/forgot-password`,
+        { email: email.trim() }
+      );
+      Alert.alert(
+        'Success',
+        'If that email is registered, a reset link has been sent. Please check your inbox.'
+      );
       navigation.goBack();
     } catch (error) {
       console.error(error.response?.data || error.message);
       Alert.alert(
         'Error',
-        error.response?.data?.error || 'Failed to send password reset link. Try again later.'
+        error.response?.data?.error ||
+          'Failed to send reset link. Please try again later.'
       );
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+      <TouchableOpacity
+        onPress={() => navigation.goBack()}
+        style={styles.backButton}
+      >
         <Text style={styles.backButtonText}>Back</Text>
       </TouchableOpacity>
-      <Text style={styles.title}>Reset Your Password</Text>
+
+      <Text style={styles.title}>Forgot Password</Text>
+
       <TextInput
         style={styles.input}
-        placeholder="Enter Email or Username"
-        placeholderTextColor="black"
-        value={emailOrUsername}
-        onChangeText={setEmailOrUsername}
+        placeholder="Enter your email"
+        placeholderTextColor="#555"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        value={email}
+        onChangeText={setEmail}
       />
-      <TouchableOpacity style={styles.resetButton} onPress={handlePasswordReset}>
-        <Text style={styles.resetButtonText}>Send Reset Link</Text>
+
+      <TouchableOpacity
+        style={[styles.resetButton, loading && { opacity: 0.7 }]}
+        onPress={handlePasswordReset}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.resetButtonText}>Send Reset Link</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -50,45 +84,46 @@ export default function ForgotPassword({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    padding: 20,
     backgroundColor: '#585858',
+    padding: 20,
+    justifyContent: 'center',
   },
   backButton: {
     position: 'absolute',
     top: 40,
     left: 20,
     backgroundColor: '#ddd',
-    padding: 10,
-    borderRadius: 8,
+    padding: 8,
+    borderRadius: 6,
   },
   backButtonText: {
-    color: 'black',
+    color: '#333',
     fontSize: 16,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '600',
+    color: '#fff',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginBottom: 10,
-    padding: 10,
+    backgroundColor: '#fff',
+    padding: 12,
     borderRadius: 8,
-    backgroundColor: 'white',
+    marginBottom: 16,
+    fontSize: 16,
+    color: '#000',
   },
   resetButton: {
     backgroundColor: '#1E90FF',
-    paddingVertical: 15,
-    borderRadius: 10,
+    paddingVertical: 14,
+    borderRadius: 8,
     alignItems: 'center',
   },
   resetButtonText: {
-    color: 'white',
+    color: '#fff',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '500',
   },
 });
