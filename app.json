@@ -58,13 +58,13 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiUrl": "http://10.0.2.2:8000/api",
+      "apiUrl": "${EXPO_PUBLIC_API_BASE_URL}",
       "eas": {
         "projectId": "db6634eb-4587-4a79-bbd7-cc68a84471f5"
       },
-      "googleClientIdIos": "865590816188-fh0c7p79r1jj2es6cuqkqkoblltu7i3f.apps.googleusercontent.com",
-      "googleClientIdAndroid": "865590816188-ieupcun4rbinoe0csmjmvraf4sgen4mp.apps.googleusercontent.com",
-      "googleClientIdWeb": "865590816188-fh0c7p79r1jj2es6cuqkqkoblltu7i3f.apps.googleusercontent.com"
+      "googleClientIdIos": "${GOOGLE_CLIENT_ID_IOS}",
+      "googleClientIdAndroid": "${GOOGLE_CLIENT_ID_ANDROID}",
+      "googleClientIdWeb": "${GOOGLE_CLIENT_ID_WEB}"
     },
     "scheme": "interpark",
     "newArchEnabled": false,
