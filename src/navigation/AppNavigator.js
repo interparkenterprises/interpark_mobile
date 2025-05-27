@@ -18,6 +18,7 @@ import MapPlace from '../screens/MapPlace';
 
 // Agent-specific screens
 import AddProperty from '../screens/AddProperty';
+import AIProcessingScreen from '../screens/AIProcessingScreen';
 
 // Create the stack navigator
 const Stack = createStackNavigator();
@@ -41,6 +42,7 @@ export default function AppNavigator() {
       {/* Agent Navigation Screens */}
       <Stack.Screen name="AgentDashboard" component={AgentDashboard} />
       <Stack.Screen name="AddProperty" component={AddProperty} />
+      <Stack.Screen name="AIProcessing" component={AIProcessingScreen} options={{ headerShown: false }} />
 
       {/* Additional Screens */}
       <Stack.Screen name="MyList" component={MyList} />

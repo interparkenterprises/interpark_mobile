@@ -114,17 +114,34 @@ const MyList = () => {
   };
 
   const deleteProperty = async (propertyId) => {
+    if (!agentLandlordId) {
+      Alert.alert('Error', 'Agent ID not available.');
+      return;
+    }
+
     try {
       await axios.delete(
         `https://interpark-backend.onrender.com/api/properties/delete/${agentLandlordId}/${propertyId}`
       );
-      setProperties(properties.filter((property) => property._id.$oid !== propertyId));
+
+      // Update properties state
+      setProperties((prevProperties) =>
+        prevProperties.filter((property) => property._id !== propertyId)
+      );
+
       Alert.alert('Success', 'Property and related chat rooms deleted successfully!');
     } catch (error) {
       console.error('Error deleting property:', error);
-      Alert.alert('Error', 'Failed to delete property.');
+
+      if (error.response) {
+        console.error('Backend error:', error.response.data);
+        Alert.alert('Error', error.response.data.error || 'Failed to delete property.');
+      } else {
+        Alert.alert('Error', 'Network or server error.');
+      }
     }
   };
+
 
   const selectImages = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({

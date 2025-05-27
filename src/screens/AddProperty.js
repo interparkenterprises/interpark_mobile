@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    View, Text, TextInput, Alert, ScrollView, Image, TouchableOpacity, 
-    KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet 
+import {
+    View, Text, TextInput, Alert, ScrollView, Image, TouchableOpacity,
+    KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import DropDownPicker from 'react-native-dropdown-picker'; // Import DropDownPicker
+import DropDownPicker from 'react-native-dropdown-picker';
 
 export default function AddProperty() {
     const [title, setTitle] = useState('');
@@ -42,7 +42,7 @@ export default function AddProperty() {
     const [images, setImages] = useState([]);
     const [userId, setUserId] = useState(null);
     const [authToken, setAuthToken] = useState(null);
-    const [purpose, setPurpose] = useState('BUY'); // Default purpose
+    const [purpose, setPurpose] = useState('BUY');
     const [isLoading, setIsLoading] = useState(false);
     const [open, setOpen] = useState(false);
     const navigation = useNavigation();
@@ -69,7 +69,7 @@ export default function AddProperty() {
     const pickImage = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-            Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to make this work!');
+            Alert.alert('Permission Denied', 'Camera roll permission is required!');
             return;
         }
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -86,37 +86,50 @@ export default function AddProperty() {
     const uploadImages = async () => {
         const formData = new FormData();
         images.forEach((uri, idx) => {
-            formData.append('images', { uri, name: `image_${idx}.jpg`, type: 'image/jpeg' });
+            formData.append('images', {
+                uri,
+                name: `image_${idx}.jpg`,
+                type: 'image/jpeg',
+            });
         });
+
         try {
-            const resp = await axios.post(
-                `https://interpark-backend.onrender.com/api/properties/upload-images`,
+            const response = await axios.post(
+                'https://interpark-backend.onrender.com/api/properties/upload-images',
                 formData,
-                { headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${authToken}` } }
+                {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                        Authorization: `Bearer ${authToken}`,
+                    },
+                }
             );
-            return resp.data.images;
+            return {
+                images: response.data.images,
+                imageResult: response.data.imageResult,
+            };
         } catch (error) {
-            console.error('Image Upload Error:', error);
-            Alert.alert('Error', 'Failed to upload images.');
+            console.error('Image Upload Error:', error.response?.data || error.message);
+            Alert.alert('Error', 'Image upload or validation failed.');
             return null;
         }
     };
 
     const handleSubmit = async () => {
+        if (purpose !== 'BUY' && purpose !== 'RENT') {
+            Alert.alert('Error', 'Please select BUY or RENT.');
+            return;
+        }
         if (descriptionWordCount > 400) {
-            Alert.alert('Error', `Description exceeds 400 words by ${descriptionWordCount - 400}. Please shorten it.`);
+            Alert.alert('Error', `Description exceeds 400 words.`);
             return;
         }
         if (!userId || !authToken) {
-            Alert.alert('Error', 'User authentication failed. Please log in again.');
+            Alert.alert('Error', 'User authentication failed.');
             return;
         }
-        if (images.length < 5) {
-            Alert.alert('Error', 'Please upload at least 5 images.');
-            return;
-        }
-        if (images.length > 7) {
-            Alert.alert('Error', 'You have uploaded more than the allowed 7 images.');
+        if (images.length < 5 || images.length > 7) {
+            Alert.alert('Error', 'Upload between 5 and 7 images.');
             return;
         }
         if (!title || !location || !type || !price || !description || !nearbyPlaces) {
@@ -125,38 +138,42 @@ export default function AddProperty() {
         }
         const parsedPrice = parseFloat(price);
         if (isNaN(parsedPrice)) {
-            Alert.alert('Error', 'Please enter a valid price.');
+            Alert.alert('Error', 'Enter a valid price.');
             return;
         }
 
         setIsLoading(true);
-        const uploaded = await uploadImages();
-        if (!uploaded) { setIsLoading(false); return; }
 
-        const data = {
-            title, location, type, price: parsedPrice,
-            description, nearbyPlaces: nearbyPlaces.split(',').map(p => p.trim()),
-            agentLandlordId: userId, images: uploaded, purpose,
-        };
-        try {
-            await axios.post(
-                `https://interpark-backend.onrender.com/api/properties/add`,
-                data,
-                { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` } }
-            );
-            Alert.alert('Success', 'Property added successfully!');
-            // Reset
-            setTitle(''); setLocation(''); setType(''); setPrice('');
-            setDescription(''); setDescriptionWordCount(0); setNearbyPlaces(''); setImages([]);
-            setPurpose('BUY');
-            navigation.navigate('PropertiesList');
-        } catch (error) {
-            console.error('Add Property Error:', error.toJSON());
-            Alert.alert('Error', 'Failed to add property.');
-        } finally {
+        const uploadResult = await uploadImages();
+        if (!uploadResult) {
             setIsLoading(false);
+            return;
         }
+
+        const payload = {
+            title,
+            location,
+            type,
+            price: parsedPrice,
+            description,
+            nearbyPlaces: nearbyPlaces.split(',').map(p => p.trim()),
+            agentLandlordId: userId,
+            images: uploadResult.images,
+            purpose,
+            imageResult: uploadResult.imageResult
+        };
+
+        navigation.navigate('AIProcessingScreen', {
+            endpoint: 'https://interpark-backend.onrender.com/api/properties/add',
+            payload,
+            onSuccessRedirect: 'PropertiesList',
+            successMessageKey: 'message',
+        });
+
+        setIsLoading(false);
     };
+
+
 
     return (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
