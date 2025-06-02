@@ -16,48 +16,36 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import DropDownPicker from 'react-native-dropdown-picker';
 import BouncyCheckbox from 'react-native-bouncy-checkbox';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-
 import Constants from 'expo-constants';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import auth from '@react-native-firebase/auth';
 
-import { EXPO_PUBLIC_API_BASE_URL } from '@env';
+// Commented out Google/Firebase imports
+// import { auth } from '../firebase';
+// let GoogleSignin;
+// let GoogleAuthProvider, signInWithCredential;
+// if (Platform.OS !== 'web' && !isRunningInExpoGo()) { … }
+
+const isRunningInExpoGo = () => Constants.appOwnership === 'expo';
 
 export default function Register({ navigation }) {
-  // Manual form state
-  const [email, setEmail]       = useState('');
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [secureTextEntry, setSecureTextEntry] = useState(true);
-
-  // Role dropdown
-  const [role, setRole]         = useState('');
-  const [open, setOpen]         = useState(false);
-  const [items, setItems]       = useState([
-    { label: 'Register as a Client',        value: 'CLIENT' },
+  const [role, setRole] = useState('');
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([
+    { label: 'Register as a Client', value: 'CLIENT' },
     { label: 'Register as an Agent/Landlord', value: 'AGENT_LANDLORD' },
   ]);
+  const [isTermsChecked, setTermsChecked] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
-  const [isTermsChecked, setTermsChecked]   = useState(false);
-  const [loading, setLoading]               = useState(false);
-  const [googleLoading, setGoogleLoading]   = useState(false);
-
-  // --- Configure Google Sign-In once ---
-  useEffect(() => {
-    const { googleClientIdWeb, googleClientIdAndroid } = Constants.expoConfig.extra;
-
-    GoogleSignin.configure({
-      webClientId: googleClientIdWeb,
-      androidClientId: googleClientIdAndroid,
-      offlineAccess: true,
-    });
-  }, []);
-
-  // --- Manual Registration ---
+  // Manual registration helpers...
   const validateEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
   const validateInputs = () => {
-    if (!email.trim() || !username.trim() || !password.trim() || !confirmPassword.trim()) {
+    if (!email || !username || !password || !confirmPassword) {
       Alert.alert('Error', 'All fields are required!');
       return false;
     }
@@ -83,7 +71,6 @@ export default function Register({ navigation }) {
     }
     setLoading(true);
     try {
-      // Check existence
       const { data: check } = await axios.post(
         `https://interpark-backend.onrender.com/api/auth/verify-user`,
         { email, username }
@@ -93,7 +80,6 @@ export default function Register({ navigation }) {
         setLoading(false);
         return;
       }
-      // Register
       await axios.post(
         `https://interpark-backend.onrender.com/api/auth/register`,
         { username, email, password, role }
@@ -111,42 +97,9 @@ export default function Register({ navigation }) {
     }
   };
 
-  // --- Google Registration/Login ---
-  const handleGoogleSignIn = async () => {
-    if (!role) {
-      return Alert.alert('Error', 'Please select your role first');
-    }
-    setGoogleLoading(true);
-    try {
-      // 1. Launch native Google Sign-In
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const { idToken: googleIdToken } = await GoogleSignin.signIn();
-
-      // 2. Create a Firebase credential with the token
-      const credential = auth.GoogleAuthProvider.credential(googleIdToken);
-      const userCredential = await auth().signInWithCredential(credential);
-
-      // 3. Get the Firebase ID token
-      const firebaseIdToken = await userCredential.user.getIdToken();
-
-      // 4. Send it to your backend
-      const { data } = await axios.post(
-        `https://interpark-backend.onrender.com/api/auth/google`,
-        { idToken: firebaseIdToken, role }
-      );
-
-      // 5. Store your JWT & user, navigate
-      await AsyncStorage.setItem('auth_token', data.token);
-      await AsyncStorage.setItem('user', JSON.stringify(data.user));
-      navigation.replace(
-        data.user.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard'
-      );
-    } catch (err) {
-      console.error('Google Sign-In Error', err);
-      Alert.alert('Error', err.response?.data?.error || err.message);
-    } finally {
-      setGoogleLoading(false);
-    }
+  // Stubbed Google handler
+  const handleGoogleSignIn = () => {
+    console.log('Google sign in button clicked');
   };
 
   return (
@@ -154,7 +107,6 @@ export default function Register({ navigation }) {
       <Image source={require('../../assets/logo.png')} style={styles.logo} />
       <Text style={styles.title}>Register</Text>
 
-      {/* Manual Fields */}
       <TextInput
         style={styles.input}
         placeholder="Email"
@@ -172,6 +124,7 @@ export default function Register({ navigation }) {
         onChangeText={setUsername}
         autoCapitalize="none"
       />
+
       <View style={styles.passwordContainer}>
         <TextInput
           style={styles.passwordInput}
@@ -188,19 +141,30 @@ export default function Register({ navigation }) {
           <Icon name={secureTextEntry ? 'eye-off' : 'eye'} size={24} color="gray" />
         </TouchableOpacity>
       </View>
-      
-      {/* Confirm Password Field with error styling */}
-      <View style={[
-        styles.passwordContainer, 
-        password && confirmPassword && password !== confirmPassword && styles.errorContainer
-      ]}>
+
+      <View
+        style={[
+          styles.passwordContainer,
+          password &&
+            confirmPassword &&
+            password !== confirmPassword &&
+            styles.errorContainer,
+        ]}
+      >
         <TextInput
           style={[
             styles.passwordInput,
-            password && confirmPassword && password !== confirmPassword && styles.errorInput
+            password &&
+              confirmPassword &&
+              password !== confirmPassword &&
+              styles.errorInput,
           ]}
           placeholder="Confirm Password"
-          placeholderTextColor={password && confirmPassword && password !== confirmPassword ? 'red' : 'black'}
+          placeholderTextColor={
+            password && confirmPassword && password !== confirmPassword
+              ? 'red'
+              : 'black'
+          }
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry={secureTextEntry}
@@ -213,7 +177,6 @@ export default function Register({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Role Picker */}
       <DropDownPicker
         open={open}
         value={role}
@@ -227,7 +190,6 @@ export default function Register({ navigation }) {
         dropDownContainerStyle={styles.dropdownList}
       />
 
-      {/* Terms */}
       <BouncyCheckbox
         size={25}
         fillColor="#005478"
@@ -243,14 +205,18 @@ export default function Register({ navigation }) {
             I agree to the{' '}
             <Text
               style={styles.checkboxLink}
-              onPress={() => Linking.openURL('https://interparkenterprises.co.ke/terms-and-conditions/')}
+              onPress={() =>
+                Linking.openURL('https://interparkenterprises.co.ke/terms-and-conditions/')
+              }
             >
               Terms
             </Text>{' '}
             and{' '}
             <Text
               style={styles.checkboxLink}
-              onPress={() => Linking.openURL('https://interparkenterprises.co.ke/privacy-policy/')}
+              onPress={() =>
+                Linking.openURL('https://interparkenterprises.co.ke/privacy-policy/')
+              }
             >
               Privacy Policy
             </Text>
@@ -258,37 +224,36 @@ export default function Register({ navigation }) {
         }
       />
 
-      {/* Manual Register */}
       <TouchableOpacity
         style={styles.registerButton}
         onPress={handleRegister}
         disabled={loading || !role}
       >
-        {loading
-          ? <ActivityIndicator size="small" color="white" />
-          : <Text style={styles.registerButtonText}>Register</Text>
-        }
+        {loading ? (
+          <ActivityIndicator size="small" color="white" />
+        ) : (
+          <Text style={styles.registerButtonText}>Register</Text>
+        )}
       </TouchableOpacity>
 
-      {/* Google Register */}
       <TouchableOpacity
         style={styles.googleButton}
         onPress={handleGoogleSignIn}
         disabled={googleLoading || !role}
       >
-        {googleLoading
-          ? <ActivityIndicator size="small" color="white" />
-          : <>
-              <Text style={styles.googleButtonText}>Register with</Text>
-              <Image
-                source={require('../../assets/google-logo-icon.png')}
-                style={styles.googleIcon}
-              />
-            </>
-        }
+        {googleLoading ? (
+          <ActivityIndicator size="small" color="white" />
+        ) : (
+          <>
+            <Text style={styles.googleButtonText}>Register with Google</Text>
+            <Image
+              source={require('../../assets/google-logo-icon.png')}
+              style={styles.googleIcon}
+            />
+          </>
+        )}
       </TouchableOpacity>
 
-      {/* Go to Login */}
       <TouchableOpacity
         style={styles.loginButton}
         onPress={() => navigation.navigate('Login')}
@@ -412,13 +377,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textDecorationLine: 'underline',
   },
-
   errorContainer: {
-  borderColor: 'red',
-  borderRadius: 8,
+    borderColor: 'red',
+    borderRadius: 8,
   },
   errorInput: {
     borderColor: 'red',
   },
-  
 });

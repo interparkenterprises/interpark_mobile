@@ -50,9 +50,12 @@ export default function AddProperty() {
     useEffect(() => {
         const fetchUserData = async () => {
             try {
-                const id = await AsyncStorage.getItem('userId');
+                const userJson = await AsyncStorage.getItem('user');
                 const token = await AsyncStorage.getItem('auth_token');
-                if (id) setUserId(id);
+                if (userJson) {
+                    const user = JSON.parse(userJson);
+                    setUserId(user._id || user.id);// or user.id depending on your backend
+                }
                 if (token) setAuthToken(token);
             } catch (error) {
                 console.error('Failed to fetch user data:', error);
@@ -78,50 +81,18 @@ export default function AddProperty() {
             quality: 1,
         });
         if (!result.canceled) {
-            const selectedImages = result.assets ? result.assets.map(a => a.uri) : [result.uri];
-            setImages(prev => [...prev, ...selectedImages]);
+            const selected = result.assets ? result.assets.map(a => a.uri) : [result.uri];
+            setImages(prev => [...prev, ...selected]);
         }
     };
 
-    const uploadImages = async () => {
-        const formData = new FormData();
-        images.forEach((uri, idx) => {
-            formData.append('images', {
-                uri,
-                name: `image_${idx}.jpg`,
-                type: 'image/jpeg',
-            });
-        });
-
-        try {
-            const response = await axios.post(
-                'https://interpark-backend.onrender.com/api/properties/upload-images',
-                formData,
-                {
-                    headers: {
-                        'Content-Type': 'multipart/form-data',
-                        Authorization: `Bearer ${authToken}`,
-                    },
-                }
-            );
-            return {
-                images: response.data.images,
-                imageResult: response.data.imageResult,
-            };
-        } catch (error) {
-            console.error('Image Upload Error:', error.response?.data || error.message);
-            Alert.alert('Error', 'Image upload or validation failed.');
-            return null;
-        }
-    };
-
-    const handleSubmit = async () => {
+    const handleSubmit = () => {
         if (purpose !== 'BUY' && purpose !== 'RENT') {
             Alert.alert('Error', 'Please select BUY or RENT.');
             return;
         }
         if (descriptionWordCount > 400) {
-            Alert.alert('Error', `Description exceeds 400 words.`);
+            Alert.alert('Error', 'Description exceeds 400 words.');
             return;
         }
         if (!userId || !authToken) {
@@ -142,14 +113,6 @@ export default function AddProperty() {
             return;
         }
 
-        setIsLoading(true);
-
-        const uploadResult = await uploadImages();
-        if (!uploadResult) {
-            setIsLoading(false);
-            return;
-        }
-
         const payload = {
             title,
             location,
@@ -158,49 +121,58 @@ export default function AddProperty() {
             description,
             nearbyPlaces: nearbyPlaces.split(',').map(p => p.trim()),
             agentLandlordId: userId,
-            images: uploadResult.images,
             purpose,
-            imageResult: uploadResult.imageResult
+            localImageUris: images
         };
 
-        navigation.navigate('AIProcessingScreen', {
-            endpoint: 'https://interpark-backend.onrender.com/api/properties/add',
+        navigation.navigate('AIProcessing', {
+            uploadEndpoint: 'https://interpark-backend.onrender.com/api/properties/upload-images',
+            addEndpoint: 'https://interpark-backend.onrender.com/api/properties/add',
             payload,
             onSuccessRedirect: 'PropertiesList',
             successMessageKey: 'message',
+            token: authToken,
         });
-
-        setIsLoading(false);
     };
-
-
 
     return (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+            <ScrollView
+                contentContainerStyle={styles.scrollContainer}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled={true} // ✅ Important fix
+            >
                 <Text style={styles.title}>Add Property</Text>
-                <TextInput style={styles.input} placeholder="Title" placeholderTextColor="#000" value={title} onChangeText={setTitle} />
-                <TextInput style={styles.input} placeholder="Location" placeholderTextColor="#000" value={location} onChangeText={setLocation} />
+                <TextInput style={styles.input} placeholder="Title" value={title} onChangeText={setTitle} placeholderTextColor="#888" />
+                <TextInput style={styles.input} placeholder="Location" value={location} onChangeText={setLocation} placeholderTextColor="#888"/>
                 <DropDownPicker
-                    open={open} value={type} items={items}
-                    setOpen={setOpen} setValue={setType} setItems={setItems}
-                    placeholder="Select a property type" containerStyle={styles.dropdownContainer}
-                    style={styles.dropdown} dropDownContainerStyle={styles.dropdownList}
-                    listMode="SCROLLVIEW" nestedScrollEnabled
+                    open={open}
+                    value={type}
+                    items={items}
+                    setOpen={setOpen}
+                    setValue={setType}
+                    setItems={setItems}
+                    placeholder="Select a property type"
+                    containerStyle={styles.dropdownContainer}
+                    style={styles.dropdown}
+                    dropDownContainerStyle={styles.dropdownList}
+                    placeholderTextColor="#888"
+                    listMode="SCROLLVIEW" // ✅ Important fix
                 />
-                <TextInput style={styles.input} placeholder="Price" placeholderTextColor="#000" value={price} onChangeText={setPrice} keyboardType="numeric" />
+                <TextInput style={styles.input} placeholder="Price" value={price} onChangeText={setPrice} keyboardType="numeric" placeholderTextColor="#888" />
                 <TextInput
                     style={[styles.input, { height: 100 }]}
-                    placeholder="Description" placeholderTextColor="#000"
+                    placeholder="Description"
                     value={description}
-                    onChangeText={text => { setDescription(text); setDescriptionWordCount(countWords(text)); }}
+                    onChangeText={text => {
+                        setDescription(text);
+                        setDescriptionWordCount(countWords(text));
+                    }}
                     multiline
+                    placeholderTextColor="#888"
                 />
                 <Text style={[styles.wordCount, descriptionWordCount > 400 && styles.errorText]}>Words: {descriptionWordCount}/400</Text>
-                {descriptionWordCount > 400 && (
-                    <Text style={styles.errorText}>Description exceeds the 400-word limit.</Text>
-                )}
-                <TextInput style={styles.input} placeholder="Nearby Places (comma-separated)" placeholderTextColor="#000" value={nearbyPlaces} onChangeText={setNearbyPlaces} multiline />
+                <TextInput style={styles.input} placeholder="Nearby Places (comma-separated)" value={nearbyPlaces} onChangeText={setNearbyPlaces} multiline placeholderTextColor="#888" />
                 <View style={styles.checkboxContainer}>
                     <TouchableOpacity onPress={() => setPurpose('BUY')} style={styles.checkbox}>
                         <Text style={styles.checkboxText}>Buy</Text>{purpose === 'BUY' && <View style={styles.checked} />}
@@ -212,7 +184,7 @@ export default function AddProperty() {
                 <TouchableOpacity onPress={pickImage} style={styles.imageButton}>
                     <Text style={styles.buttonText}>Pick Images</Text>
                 </TouchableOpacity>
-                <Text style={styles.disclaimerText}>The number of images to be uploaded should be at least 5 and at most 7.</Text>
+                <Text style={styles.disclaimerText}>Upload between 5 and 7 images.</Text>
                 <View style={styles.imagePreview}>
                     {images.map((uri, i) => (
                         <View key={i} style={styles.imageContainer}>
@@ -225,15 +197,8 @@ export default function AddProperty() {
                 </View>
             </ScrollView>
             <View style={styles.buttonContainer}>
-                <TouchableOpacity style={[styles.submitButton, (isLoading || descriptionWordCount > 400) && { backgroundColor: '#aaa' }]} onPress={handleSubmit} disabled={isLoading || descriptionWordCount > 400}>
-                    {isLoading ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="small" color="#fff" />
-                            <Text style={styles.loadingText}>Submitting...</Text>
-                        </View>
-                    ) : (
-                        <Text style={styles.submitButtonText}>Submit Property</Text>
-                    )}
+                <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
+                    <Text style={styles.submitButtonText}>Submit Property</Text>
                 </TouchableOpacity>
             </View>
         </KeyboardAvoidingView>
@@ -242,26 +207,24 @@ export default function AddProperty() {
 
 const styles = StyleSheet.create({
     scrollContainer: { flexGrow: 1, padding: 20, backgroundColor: '#E0E0E0' },
-    title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20, marginTop: 30, color: '#231f20' },
-    input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginBottom: 15, padding: 10, color: '#000' },
+    title: { fontSize: 24, fontWeight: 'bold', marginVertical: 20, color: '#231f20' },
+    input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, marginBottom: 15, padding: 10 , backgroundColor: '#fff', color: '#000' },
     dropdownContainer: { marginBottom: 15, height: 40 },
     dropdown: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, paddingHorizontal: 10 },
     dropdownList: { borderWidth: 1, borderColor: '#ccc' },
-    wordCount: { alignSelf: 'flex-end', marginBottom: 10, fontSize: 12, color: '#000' },
-    errorText: { color: '#FF0000', fontSize: 12, marginBottom: 10 },
+    wordCount: { alignSelf: 'flex-end', fontSize: 12 },
+    errorText: { color: '#FF0000' },
     imageButton: { backgroundColor: '#005478', padding: 15, borderRadius: 8, marginBottom: 10 },
-    buttonText: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
+    buttonText: { color: '#fff', textAlign: 'center' },
     disclaimerText: { color: '#FF0000', marginBottom: 10, textAlign: 'center', fontSize: 10 },
     imagePreview: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 15 },
-    image: { width: 100, height: 100, marginRight: 10, marginBottom: 10, borderRadius: 8 },
+    image: { width: 100, height: 100, borderRadius: 8 },
     imageContainer: { position: 'relative', marginRight: 10, marginBottom: 10 },
-    removeButton: { position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(255, 0, 0, 0.7)', borderRadius: 10, width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
+    removeButton: { position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(255,0,0,0.7)', borderRadius: 10, width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
     removeButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
     buttonContainer: { padding: 10, backgroundColor: '#231F20' },
     submitButton: { backgroundColor: '#005478', padding: 15, borderRadius: 8 },
     submitButtonText: { color: '#fff', textAlign: 'center', fontWeight: 'bold' },
-    loadingContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-    loadingText: { color: '#fff', marginLeft: 10 },
     checkboxContainer: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 15 },
     checkbox: { flexDirection: 'row', alignItems: 'center' },
     checkboxText: { color: '#231f20', marginRight: 5 },

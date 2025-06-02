@@ -4,6 +4,7 @@
     "slug": "InterPark",
     "version": "1.0.0",
     "orientation": "portrait",
+    "jsEngine": "jsc",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -24,7 +25,9 @@
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload property images.",
         "CFBundleURLTypes": [
           {
-            "CFBundleURLSchemes": ["interpark"]
+            "CFBundleURLSchemes": [
+              "interpark"
+            ]
           }
         ]
       }
@@ -49,7 +52,10 @@
               "scheme": "interpark"
             }
           ],
-          "category": ["DEFAULT", "BROWSABLE"]
+          "category": [
+            "DEFAULT",
+            "BROWSABLE"
+          ]
         }
       ],
       "googleServicesFile": "./google-services.json"
@@ -67,7 +73,7 @@
       "googleClientIdWeb": "${GOOGLE_CLIENT_ID_WEB}"
     },
     "scheme": "interpark",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "notification": {
       "icon": "./assets/adaptive-icon.png"
     },
@@ -80,7 +86,9 @@
             "googleServicesFile": "./google-services.json"
           }
         }
-      ]
+      ],
+      "expo-router",
+      "expo-secure-store"
     ]
   }
 }

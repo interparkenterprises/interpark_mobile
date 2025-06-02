@@ -116,7 +116,7 @@ const ChatList = () => {
             <TextInput
                 style={styles.searchInput}
                 placeholder="Search by property title..."
-                placeholderTextColor="#aaa"
+                placeholderTextColor="#1B1B1B"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
             />
@@ -154,20 +154,20 @@ const styles = StyleSheet.create({
     },
     searchInput: {
         height: 40,
-        backgroundColor: '#231F20',
-        color: 'white',
+        backgroundColor: '#7F7F7F',
+        color: '#1B1B1B',
         borderRadius: 8,
         paddingHorizontal: 10,
         marginBottom: 16,
     },
     chatRoom: {
         padding: 16,
-        backgroundColor: '#231f20',
+        backgroundColor: '#7F7F7F',
         borderRadius: 8,
         marginBottom: 8,
     },
     chatRoomText: {
-        color: '#fff',
+        color: '#1B1B1B',
     },
     noChatRoomsText: {
         color: '#231f20',

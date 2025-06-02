@@ -1,3 +1,4 @@
+// Login.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -12,12 +13,10 @@ import {
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-
 import Constants from 'expo-constants';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import auth from '@react-native-firebase/auth';
-
 import { EXPO_PUBLIC_API_BASE_URL } from '@env';
+
+const isRunningInExpoGo = () => Constants.appOwnership === 'expo';
 
 export default function Login({ navigation }) {
   const [username, setUsername] = useState('');
@@ -26,29 +25,40 @@ export default function Login({ navigation }) {
   const [isPasswordVisible, setPasswordVisible] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  useEffect(() => {
-    const { googleClientIdWeb, googleClientIdAndroid } = Constants.expoConfig.extra;
-
-    GoogleSignin.configure({
-      webClientId: googleClientIdWeb,
-      androidClientId: googleClientIdAndroid,
-      offlineAccess: true,
-    });
-  }, []);
-
   const handleLogin = async () => {
     if (!username || !password) {
       return Alert.alert('Error', 'Both fields are required');
     }
     setLoading(true);
+
     try {
+      // 1) Authenticate user
       const { data } = await axios.post(
-        `https://interpark-backend.onrender.com/api/auth/login`,
+        `${EXPO_PUBLIC_API_BASE_URL}/auth/login`,
         { username, password }
       );
+
+      // 2) Save auth data
       await AsyncStorage.setItem('auth_token', data.token);
       await AsyncStorage.setItem('user', JSON.stringify(data.user));
       await AsyncStorage.setItem('userId', data.user._id || data.user.id);
+
+      // 3) Preload chat rooms for this user
+      try {
+        const roomsRes = await axios.get(
+          `${EXPO_PUBLIC_API_BASE_URL}/chat/rooms/${data.user._id || data.user.id}`,
+          { headers: { Authorization: `Bearer ${data.token}` } }
+        );
+        // Assuming roomsRes.data is an array of chat rooms
+        await AsyncStorage.setItem(
+          'userChatRooms',
+          JSON.stringify(roomsRes.data)
+        );
+      } catch (err) {
+        console.warn('Could not preload chat rooms:', err);
+      }
+
+      // 4) Navigate to the appropriate dashboard
       navigation.replace(
         data.user.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard'
       );
@@ -60,33 +70,9 @@ export default function Login({ navigation }) {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
-    try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const { idToken: googleIdToken } = await GoogleSignin.signIn();
-
-      const credential = auth.GoogleAuthProvider.credential(googleIdToken);
-      const userCredential = await auth().signInWithCredential(credential);
-      const firebaseIdToken = await userCredential.user.getIdToken();
-
-      const { data } = await axios.post(
-        `https://interpark-backend.onrender.com/api/auth/google`,
-        { idToken: firebaseIdToken }
-      );
-
-      await AsyncStorage.setItem('auth_token', data.token);
-      await AsyncStorage.setItem('user', JSON.stringify(data.user));
-      await AsyncStorage.setItem('userId', data.user._id || data.user.id);
-      navigation.replace(
-        data.user.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard'
-      );
-    } catch (err) {
-      console.error('Google Sign-In Error', err);
-      Alert.alert('Error', err.response?.data?.error || err.message);
-    } finally {
-      setGoogleLoading(false);
-    }
+  // Stubbed Google handler
+  const handleGoogleSignIn = () => {
+    console.log('Google sign in button clicked');
   };
 
   return (
@@ -102,6 +88,7 @@ export default function Login({ navigation }) {
         onChangeText={setUsername}
         autoCapitalize="none"
       />
+
       <View style={styles.passwordContainer}>
         <TextInput
           style={styles.passwordInput}
@@ -115,15 +102,10 @@ export default function Login({ navigation }) {
           onPress={() => setPasswordVisible(!isPasswordVisible)}
           style={styles.eyeIcon}
         >
-          <Icon
-            name={isPasswordVisible ? 'eye' : 'eye-off'}
-            size={24}
-            color="gray"
-          />
+          <Icon name={isPasswordVisible ? 'eye' : 'eye-off'} size={24} color="gray" />
         </TouchableOpacity>
       </View>
 
-      {/* Forgot Password Link */}
       <TouchableOpacity
         onPress={() => navigation.navigate('ForgotPassword')}
         style={styles.forgotPasswordLink}
@@ -136,10 +118,11 @@ export default function Login({ navigation }) {
         onPress={handleLogin}
         disabled={loading}
       >
-        {loading
-          ? <ActivityIndicator size="small" color="white" />
-          : <Text style={styles.buttonText}>Login</Text>
-        }
+        {loading ? (
+          <ActivityIndicator size="small" color="white" />
+        ) : (
+          <Text style={styles.buttonText}>Login</Text>
+        )}
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -147,16 +130,17 @@ export default function Login({ navigation }) {
         onPress={handleGoogleSignIn}
         disabled={googleLoading}
       >
-        {googleLoading
-          ? <ActivityIndicator size="small" color="white" />
-          : <>
-              <Text style={styles.googleButtonText}>Login with Google</Text>
-              <Image
-                source={require('../../assets/google-logo-icon.png')}
-                style={styles.googleIcon}
-              />
-            </>
-        }
+        {googleLoading ? (
+          <ActivityIndicator size="small" color="white" />
+        ) : (
+          <>
+            <Text style={styles.googleButtonText}>Login with Google</Text>
+            <Image
+              source={require('../../assets/google-logo-icon.png')}
+              style={styles.googleIcon}
+            />
+          </>
+        )}
       </TouchableOpacity>
 
       <TouchableOpacity

@@ -342,13 +342,18 @@ export default function PropertiesList() {
       <TextInput
         style={styles.searchBar}
         placeholder="Search for your type"
-        placeholderTextColor="#dddddd"
+        placeholderTextColor="#1B1B1B"
         value={searchQuery}
         onChangeText={setSearchQuery}
       />
 
-      {/* Filter Bar */}
-      <View style={styles.filterBar}>
+      {/* Filter Bar - Updated with ScrollView for horizontal scrolling */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterBarContainer}
+        style={styles.filterBarScrollView}
+      >
         {getUniqueTypes(properties).map((type) => (
           <TouchableOpacity
             key={type}
@@ -358,7 +363,7 @@ export default function PropertiesList() {
             <Text style={styles.filterText}>{type}</Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       {loading ? (
         <ActivityIndicator size="large" color="#0000ff" />
@@ -425,17 +430,46 @@ export default function PropertiesList() {
 
 
 
-// Define the styles
+// Define the styles - UPDATED TO FIX TEXT CLIPPING
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#E0E0E0' },
-  searchBar: { backgroundColor: '#231F20', color: '#ffffff', padding: 10, margin: 10,marginTop: 30, borderRadius: 8 },
-  filterBar: { flexDirection: 'row', justifyContent: 'center', marginVertical: 10 },
-  filterButton: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, backgroundColor: '#005478', marginHorizontal: 5 },
+  searchBar: { backgroundColor: '#7F7F7F', color: '#1B1B1B', padding: 10, margin: 10,marginTop: 35, borderRadius: 8 },
+  
+  // Updated filter bar styles for horizontal scrolling with proper text visibility
+  filterBarScrollView: {
+    marginVertical: 10,
+    maxHeight: 60, // Increased height to accommodate descenders
+  },
+  filterBarContainer: {
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    minWidth: '100%', // Ensure minimum width
+    paddingVertical: 5, // Added vertical padding
+  },
+  filterButton: { 
+    paddingHorizontal: 18, // Increased horizontal padding
+    paddingVertical: 12, // Increased vertical padding for better text space
+    borderRadius: 20, 
+    backgroundColor: '#005478', 
+    marginHorizontal: 5,
+    minWidth: 80, // Ensure consistent button width
+    minHeight: 40, // Added minimum height to ensure text fits
+    alignItems: 'center', // Center text horizontally
+    justifyContent: 'center', // Center text vertically
+  },
   activeFilterButton: { backgroundColor: '#231f20' },
-  filterText: { color: '#ffffff', fontSize: 14 },
+  filterText: { 
+    color: '#ffffff', 
+    fontSize: 14, 
+    textAlign: 'center',
+    lineHeight: 18, // Added line height to prevent clipping
+    includeFontPadding: false, // Remove extra padding on Android
+    textAlignVertical: 'center', // Center text vertically on Android
+  },
+  
   noResultsText: { color: '#ffffff', textAlign: 'center', marginTop: 20 },
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#231F20' },
-  propertyCard: { backgroundColor: '#231F20', borderRadius: 10, padding: 10, marginVertical: 8, marginHorizontal: 16 },
+  propertyCard: { backgroundColor: '#7F7F7F', borderRadius: 10, padding: 10, marginVertical: 8, marginHorizontal: 16 },
   propertyImage: { width: width - 40, height: 200, borderRadius: 10 },
   imageScroll: { height: 200 },
   propertyInfo: { paddingVertical: 10 },
@@ -492,4 +526,3 @@ const styles = StyleSheet.create({
   },
   
 });
-

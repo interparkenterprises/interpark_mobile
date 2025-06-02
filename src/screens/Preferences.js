@@ -40,7 +40,7 @@ export default function Preferences() {
   const fetchFavorites = async (userId) => {
     setLoading(true);
     try {
-      const response = await axios.get(`https://interpark-backend.onrender.com/api/${userId}`);
+      const response = await axios.get(`https://interpark-backend.onrender.com/api/favorites/${userId}`);
       setFavorites(response.data.favorites);
     } catch (error) {
       console.error('Error fetching favorites:', error);
