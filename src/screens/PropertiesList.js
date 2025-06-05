@@ -163,9 +163,7 @@ export default function PropertiesList() {
 }, []);
 
   
-  useEffect(() => {
-    fetchProperties();
-  }, []);
+
 
   useEffect(() => {
     if (propertyId && properties.length > 0) {
@@ -242,6 +240,7 @@ export default function PropertiesList() {
 
   const renderProperty = ({ item }) => {
     const price = parseFloat(item.price?.$numberDouble) || 0.0;
+    const currency = item.currency || 'Ksh';
     const imageFilenames = item.images || [];
     const propertyLocation = item.location || 'Unknown Location';
     const propertyPurpose = item.purpose || 'Unknown Purpose';
@@ -297,7 +296,7 @@ export default function PropertiesList() {
             <Text style={styles.propertyLocation}>{propertyLocation}</Text>
           </View>
 
-          <Text style={styles.propertyPrice}>Ksh{price.toFixed(2)}</Text>
+          <Text style={styles.propertyPrice}>{currency} {price.toFixed(2)}</Text>
           <Text style={styles.propertyPurpose}>{propertyPurpose}</Text>
 
           {userRole === 'CLIENT' && (

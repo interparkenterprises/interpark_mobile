@@ -9,14 +9,15 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Constants from 'expo-constants';
-import { EXPO_PUBLIC_API_BASE_URL } from '@env';
+import * as WebBrowser from 'expo-web-browser';
+import { EXPO_PUBLIC_API_BASE_URL, GOOGLE_WEB_CLIENT_ID, BACKEND_URL } from '@env';
 
-const isRunningInExpoGo = () => Constants.appOwnership === 'expo';
+WebBrowser.maybeCompleteAuthSession();
 
 export default function Login({ navigation }) {
   const [username, setUsername] = useState('');
@@ -25,40 +26,186 @@ export default function Login({ navigation }) {
   const [isPasswordVisible, setPasswordVisible] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  // Deep linking handler (consistent with Register.js)
+  const handleDeepLink = async (event) => {
+    let url;
+    
+    if (typeof event === 'string') {
+      url = event;
+    } else if (event.url) {
+      url = event.url;
+    } else {
+      console.log('No URL found in deep link event');
+      return;
+    }
+
+    console.log('Processing deep link:', url);
+    
+    if (url.includes('interpark://google-auth')) {
+      try {
+        const params = new URLSearchParams(url.split('?')[1]);
+        const token = params.get('token');
+        
+        console.log('Extracted token:', token);
+        
+        if (token) {
+          await handleGoogleToken(token);
+        } else {
+          console.log('No token found in deep link');
+        }
+      } catch (error) {
+        console.error('Error processing deep link:', error);
+        Alert.alert('Error', 'Failed to process authentication');
+      }
+    }
+  };
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+
+    Linking.getInitialURL().then((url) => {
+      if (url && url.includes('interpark://google-auth')) {
+        handleDeepLink(url);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  // Called once we get idToken from the deep link
+  const handleGoogleToken = async (idToken) => {
+    console.log('Handling Google token for login');
+    setGoogleLoading(true);
+    try {
+      console.log('Sending token to backend...');
+      const response = await axios.post(
+        `${BACKEND_URL}/api/auth/google`, // Use consistent backend URL
+        { idToken, role: 'CLIENT' }, // Include role parameter (defaulting to CLIENT for login)
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000,
+        }
+      );
+
+      console.log('Google auth response:', response.data);
+
+      if (response.data.token) {
+        // Save auth data
+        await AsyncStorage.setItem('auth_token', response.data.token);
+        await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
+        await AsyncStorage.setItem('userId', response.data.user.id || response.data.user._id);
+
+        // Preload chat rooms
+        try {
+          const roomsRes = await axios.get(
+            `${BACKEND_URL}/api/chat/rooms/${response.data.user.id || response.data.user._id}`,
+            { headers: { Authorization: `Bearer ${response.data.token}` } }
+          );
+          await AsyncStorage.setItem('userChatRooms', JSON.stringify(roomsRes.data));
+        } catch (err) {
+          console.warn('Could not preload chat rooms:', err);
+        }
+
+        Alert.alert(
+          'Welcome!', 
+          response.data.message || 'Google login successful',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Navigate to appropriate dashboard based on user role
+                navigation.replace(
+                  response.data.user.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard'
+                );
+              }
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+      let errorMessage = 'Failed to authenticate with Google';
+      
+      if (error.response) {
+        console.log('Error response data:', error.response.data);
+        errorMessage = error.response.data.error || errorMessage;
+      } else if (error.request) {
+        console.log('Error request:', error.request);
+        errorMessage = 'No response from server';
+      }
+      
+      Alert.alert('Google Login Failed', errorMessage);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // Open Google's OAuth consent screen (consistent with Register.js)
+  const handleGoogleSignIn = async () => {
+    console.log('Starting Google sign-in for login');
+    setGoogleLoading(true);
+    try {
+      // For login, we'll use CLIENT as default role, but the backend will use existing user's role
+      const state = JSON.stringify({ role: 'CLIENT' });
+      const encodedState = btoa(unescape(encodeURIComponent(state)));
+      
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${GOOGLE_WEB_CLIENT_ID}&` +
+        `redirect_uri=${encodeURIComponent(`${BACKEND_URL}/api/auth/google-callback`)}&` +
+        `response_type=code&` +
+        `scope=openid%20profile%20email&` +
+        `state=${encodedState}&` +
+        `prompt=select_account`;
+
+      console.log('Opening Google auth URL:', authUrl);
+      
+      await WebBrowser.warmUpAsync();
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, 'interpark://');
+      console.log('WebBrowser result:', result);
+      
+      if (result.url) {
+        await handleDeepLink(result);
+      }
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      Alert.alert('Error', 'Failed to initiate Google sign-in');
+    } finally {
+      await WebBrowser.coolDownAsync();
+      setGoogleLoading(false);
+    }
+  };
+
+  // Regular (username/password) login
   const handleLogin = async () => {
     if (!username || !password) {
       return Alert.alert('Error', 'Both fields are required');
     }
     setLoading(true);
-
     try {
-      // 1) Authenticate user
       const { data } = await axios.post(
         `${EXPO_PUBLIC_API_BASE_URL}/auth/login`,
         { username, password }
       );
 
-      // 2) Save auth data
       await AsyncStorage.setItem('auth_token', data.token);
       await AsyncStorage.setItem('user', JSON.stringify(data.user));
-      await AsyncStorage.setItem('userId', data.user._id || data.user.id);
+      await AsyncStorage.setItem('userId', data.user.id || data.user._id);
 
-      // 3) Preload chat rooms for this user
+      // Preload chat rooms
       try {
         const roomsRes = await axios.get(
-          `${EXPO_PUBLIC_API_BASE_URL}/chat/rooms/${data.user._id || data.user.id}`,
+          `${EXPO_PUBLIC_API_BASE_URL}/chat/rooms/${data.user.id || data.user._id}`,
           { headers: { Authorization: `Bearer ${data.token}` } }
         );
-        // Assuming roomsRes.data is an array of chat rooms
-        await AsyncStorage.setItem(
-          'userChatRooms',
-          JSON.stringify(roomsRes.data)
-        );
+        await AsyncStorage.setItem('userChatRooms', JSON.stringify(roomsRes.data));
       } catch (err) {
         console.warn('Could not preload chat rooms:', err);
       }
 
-      // 4) Navigate to the appropriate dashboard
       navigation.replace(
         data.user.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard'
       );
@@ -68,11 +215,6 @@ export default function Login({ navigation }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Stubbed Google handler
-  const handleGoogleSignIn = () => {
-    console.log('Google sign in button clicked');
   };
 
   return (
@@ -88,7 +230,6 @@ export default function Login({ navigation }) {
         onChangeText={setUsername}
         autoCapitalize="none"
       />
-
       <View style={styles.passwordContainer}>
         <TextInput
           style={styles.passwordInput}
@@ -126,7 +267,10 @@ export default function Login({ navigation }) {
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.googleButton}
+        style={[
+          styles.googleButton,
+          googleLoading && styles.disabledButton
+        ]}
         onPress={handleGoogleSignIn}
         disabled={googleLoading}
       >
@@ -249,5 +393,8 @@ const styles = StyleSheet.create({
     color: '#005478',
     fontSize: 16,
     textDecorationLine: 'underline',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

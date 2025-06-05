@@ -201,7 +201,7 @@ const MyList = () => {
     <View style={styles.propertyCard}>
       <Text style={styles.propertyTitle}>{item.title}</Text>
       <Text>{item.location}</Text>
-      <Text>Price: Ksh{item.price.$numberDouble}</Text>
+      <Text>Price: {item.currency}{item.price.$numberDouble}</Text>
       <Text>Purpose: {item.purpose}</Text>
       
       <View style={styles.imageContainer}>
@@ -228,7 +228,11 @@ const MyList = () => {
 
       <TouchableOpacity
         style={styles.editButton}
-        onPress={() => setEditingProperty({ ...item, price: item.price.$numberDouble })}
+        onPress={() => setEditingProperty({ 
+          ...item, 
+          price: item.price.$numberDouble,
+          currency: item.currency || 'KSH'
+        })}
       >
         <Text style={styles.buttonText}>Edit Property</Text>
       </TouchableOpacity>
@@ -267,6 +271,12 @@ const MyList = () => {
             style={styles.input}
           />
           <TextInput
+            placeholder="Currency (KSH/USD)"
+            value={editingProperty.currency}
+            onChangeText={(text) => setEditingProperty({ ...editingProperty, currency: text.toUpperCase() })}
+            style={styles.input}
+          />
+          <TextInput
             placeholder="Purpose"
             value={editingProperty.purpose}
             onChangeText={(text) => setEditingProperty({ ...editingProperty, purpose: text })}
@@ -300,6 +310,7 @@ const MyList = () => {
       )}
     </View>
   );
+
 
   return (
     <View style={styles.container}>

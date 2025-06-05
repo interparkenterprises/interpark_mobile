@@ -1,4 +1,3 @@
-// Register.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -10,21 +9,20 @@ import {
   Image,
   ActivityIndicator,
   Linking,
+  Platform,
 } from 'react-native';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import DropDownPicker from 'react-native-dropdown-picker';
 import BouncyCheckbox from 'react-native-bouncy-checkbox';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Constants from 'expo-constants';
+import * as WebBrowser from 'expo-web-browser';
+import * as SecureStore from 'expo-secure-store';
+import {
+  GOOGLE_WEB_CLIENT_ID,
+  BACKEND_URL,
+} from '@env';
 
-// Commented out Google/Firebase imports
-// import { auth } from '../firebase';
-// let GoogleSignin;
-// let GoogleAuthProvider, signInWithCredential;
-// if (Platform.OS !== 'web' && !isRunningInExpoGo()) { … }
-
-const isRunningInExpoGo = () => Constants.appOwnership === 'expo';
+WebBrowser.maybeCompleteAuthSession();
 
 export default function Register({ navigation }) {
   const [email, setEmail] = useState('');
@@ -36,14 +34,154 @@ export default function Register({ navigation }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([
     { label: 'Register as a Client', value: 'CLIENT' },
-    { label: 'Register as an Agent/Landlord', value: 'AGENT_LANDLORD' },
+    { label: 'Register as an Agent/Landlord', value: 'AGENT_LANDLORD' } // Fixed typo here
   ]);
   const [isTermsChecked, setTermsChecked] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  // Manual registration helpers...
-  const validateEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  // Deep linking handler
+  const handleDeepLink = async (event) => {
+    let url;
+    
+    if (typeof event === 'string') {
+      url = event;
+    } else if (event.url) {
+      url = event.url;
+    } else {
+      console.log('No URL found in deep link event');
+      return;
+    }
+
+    console.log('Processing deep link:', url);
+    
+    if (url.includes('interpark://google-auth')) {
+      try {
+        const params = new URLSearchParams(url.split('?')[1]);
+        const token = params.get('token');
+        // FIX: Decode and clean the role parameter
+        let role = params.get('role');
+        if (role) {
+          role = decodeURIComponent(role).trim(); // Remove any extra characters
+          // Ensure it's a valid role
+          if (!['CLIENT', 'AGENT_LANDLORD'].includes(role)) {
+            role = 'CLIENT'; // Default fallback
+          }
+        } else {
+          role = 'CLIENT'; // Default fallback
+        }
+        
+        console.log('Extracted token:', token);
+        console.log('Extracted and cleaned role:', role);
+        
+        if (token) {
+          await handleGoogleToken(token, role);
+        } else {
+          console.log('No token found in deep link');
+        }
+      } catch (error) {
+        console.error('Error processing deep link:', error);
+        Alert.alert('Error', 'Failed to process authentication');
+      }
+    }
+  };
+
+  const handleGoogleToken = async (idToken, role) => {
+    console.log('Handling Google token for role:', role);
+    setGoogleLoading(true);
+    try {
+      console.log('Sending token to backend...');
+      const response = await axios.post(
+        `${BACKEND_URL}/api/auth/google`,
+        { idToken, role },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000,
+        }
+      );
+
+      console.log('Google auth response:', response.data);
+
+      if (response.data.token) {
+        await SecureStore.setItemAsync('authToken', response.data.token);
+        
+        Alert.alert(
+          'Welcome!', 
+          response.data.message || 'Google registration successful',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.navigate('Login')
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+      let errorMessage = 'Failed to authenticate with Google';
+      
+      if (error.response) {
+        console.log('Error response data:', error.response.data);
+        errorMessage = error.response.data.error || errorMessage;
+      } else if (error.request) {
+        console.log('Error request:', error.request);
+        errorMessage = 'No response from server';
+      }
+      
+      Alert.alert('Google Registration Failed', errorMessage);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (!role) {
+      Alert.alert('Error', 'Please select your role first');
+      return;
+    }
+
+    if (!isTermsChecked) {
+      Alert.alert('Error', 'You must accept the terms and conditions');
+      return;
+    }
+
+    console.log('Starting Google sign-in for role:', role);
+    setGoogleLoading(true);
+    try {
+      const state = JSON.stringify({ role });
+      const encodedState = btoa(unescape(encodeURIComponent(state)));
+      
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${GOOGLE_WEB_CLIENT_ID}&` +
+        `redirect_uri=${encodeURIComponent(`${BACKEND_URL}/api/auth/google-callback`)}&` +
+        `response_type=code&` +
+        `scope=openid%20profile%20email&` +
+        `state=${encodedState}&` +
+        `prompt=select_account`;
+
+      console.log('Opening Google auth URL:', authUrl);
+      
+      await WebBrowser.warmUpAsync();
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, 'interpark://');
+      console.log('WebBrowser result:', result);
+      
+      if (result.url) {
+        await handleDeepLink(result);
+      }
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      Alert.alert('Error', 'Failed to initiate Google sign-in');
+    } finally {
+      await WebBrowser.coolDownAsync();
+      setGoogleLoading(false);
+    }
+  };
+
+  // ... rest of your component code (styles, other handlers, render method) ...
+  const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  
   const validateInputs = () => {
     if (!email || !username || !password || !confirmPassword) {
       Alert.alert('Error', 'All fields are required!');
@@ -58,7 +196,7 @@ export default function Register({ navigation }) {
       return false;
     }
     if (!isTermsChecked) {
-      Alert.alert('Error', 'You must accept the terms');
+      Alert.alert('Error', 'You must accept the terms and conditions');
       return false;
     }
     return true;
@@ -69,42 +207,51 @@ export default function Register({ navigation }) {
       if (!role) Alert.alert('Error', 'Please select your role');
       return;
     }
+    
+    console.log('Starting regular registration');
     setLoading(true);
     try {
       const { data: check } = await axios.post(
-        `https://interpark-backend.onrender.com/api/auth/verify-user`,
+        `${BACKEND_URL}/api/auth/verify-user`,
         { email, username }
       );
+      
       if (check.exists) {
         Alert.alert('Registration Failed', 'User already exists');
         setLoading(false);
         return;
       }
+
       await axios.post(
-        `https://interpark-backend.onrender.com/api/auth/register`,
+        `${BACKEND_URL}/api/auth/register`,
         { username, email, password, role }
       );
+      
       Alert.alert(
         'Registration Successful',
-        'Please check your email to confirm before logging in'
+        'Please check your email to confirm before logging in',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('Login')
+          }
+        ]
       );
-      navigation.navigate('Login');
     } catch (err) {
-      console.error(err);
-      Alert.alert('Registration Failed', err.response?.data?.error || err.message);
+      console.error('Registration error:', err);
+      const errorMessage = err.response?.data?.error || err.message;
+      Alert.alert('Registration Failed', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // Stubbed Google handler
-  const handleGoogleSignIn = () => {
-    console.log('Google sign in button clicked');
-  };
-
   return (
     <View style={styles.container}>
-      <Image source={require('../../assets/logo.png')} style={styles.logo} />
+      <Image
+        source={require('../../assets/logo.png')}
+        style={styles.logo}
+      />
       <Text style={styles.title}>Register</Text>
 
       <TextInput
@@ -138,7 +285,11 @@ export default function Register({ navigation }) {
           style={styles.eyeIcon}
           onPress={() => setSecureTextEntry(!secureTextEntry)}
         >
-          <Icon name={secureTextEntry ? 'eye-off' : 'eye'} size={24} color="gray" />
+          <Icon
+            name={secureTextEntry ? 'eye-off' : 'eye'}
+            size={24}
+            color="gray"
+          />
         </TouchableOpacity>
       </View>
 
@@ -173,7 +324,11 @@ export default function Register({ navigation }) {
           style={styles.eyeIcon}
           onPress={() => setSecureTextEntry(!secureTextEntry)}
         >
-          <Icon name={secureTextEntry ? 'eye-off' : 'eye'} size={24} color="gray" />
+          <Icon
+            name={secureTextEntry ? 'eye-off' : 'eye'}
+            size={24}
+            color="gray"
+          />
         </TouchableOpacity>
       </View>
 
@@ -206,7 +361,9 @@ export default function Register({ navigation }) {
             <Text
               style={styles.checkboxLink}
               onPress={() =>
-                Linking.openURL('https://interparkenterprises.co.ke/terms-and-conditions/')
+                Linking.openURL(
+                  'https://interparkenterprises.co.ke/terms-and-conditions/'
+                )
               }
             >
               Terms
@@ -215,7 +372,9 @@ export default function Register({ navigation }) {
             <Text
               style={styles.checkboxLink}
               onPress={() =>
-                Linking.openURL('https://interparkenterprises.co.ke/privacy-policy/')
+                Linking.openURL(
+                  'https://interparkenterprises.co.ke/privacy-policy/'
+                )
               }
             >
               Privacy Policy
@@ -225,7 +384,10 @@ export default function Register({ navigation }) {
       />
 
       <TouchableOpacity
-        style={styles.registerButton}
+        style={[
+          styles.registerButton,
+          (!role || loading) && styles.disabledButton
+        ]}
         onPress={handleRegister}
         disabled={loading || !role}
       >
@@ -237,15 +399,20 @@ export default function Register({ navigation }) {
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.googleButton}
+        style={[
+          styles.googleButton,
+          (!role || !isTermsChecked || googleLoading) && styles.disabledButton
+        ]}
         onPress={handleGoogleSignIn}
-        disabled={googleLoading || !role}
+        disabled={googleLoading || !role || !isTermsChecked}
       >
         {googleLoading ? (
           <ActivityIndicator size="small" color="white" />
         ) : (
           <>
-            <Text style={styles.googleButtonText}>Register with Google</Text>
+            <Text style={styles.googleButtonText}>
+              Register with Google
+            </Text>
             <Image
               source={require('../../assets/google-logo-icon.png')}
               style={styles.googleIcon}
@@ -258,7 +425,9 @@ export default function Register({ navigation }) {
         style={styles.loginButton}
         onPress={() => navigation.navigate('Login')}
       >
-        <Text style={styles.loginText}>Already have an account? Login</Text>
+        <Text style={styles.loginText}>
+          Already have an account? Login
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -383,5 +552,8 @@ const styles = StyleSheet.create({
   },
   errorInput: {
     borderColor: 'red',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

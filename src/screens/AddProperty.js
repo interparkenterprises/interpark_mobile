@@ -35,6 +35,11 @@ export default function AddProperty() {
         { label: 'Commercial Property', value: 'Commercial Property' },
         { label: 'Land', value: 'Land' },
     ]);
+    const [currency, setCurrency] = useState('');
+    const [currencyItems, setCurrencyItems] = useState([
+        { label: 'KSH', value: 'KSH' },
+        { label: 'USD', value: 'USD' },
+    ]);
     const [price, setPrice] = useState('');
     const [description, setDescription] = useState('');
     const [descriptionWordCount, setDescriptionWordCount] = useState(0);
@@ -45,6 +50,7 @@ export default function AddProperty() {
     const [purpose, setPurpose] = useState('BUY');
     const [isLoading, setIsLoading] = useState(false);
     const [open, setOpen] = useState(false);
+    const [currencyOpen, setCurrencyOpen] = useState(false);
     const navigation = useNavigation();
 
     useEffect(() => {
@@ -103,7 +109,7 @@ export default function AddProperty() {
             Alert.alert('Error', 'Upload between 5 and 7 images.');
             return;
         }
-        if (!title || !location || !type || !price || !description || !nearbyPlaces) {
+        if (!title || !location || !type || !currency || !price || !description || !nearbyPlaces) {
             Alert.alert('Error', 'All fields are required.');
             return;
         }
@@ -117,6 +123,7 @@ export default function AddProperty() {
             title,
             location,
             type,
+            currency,
             price: parsedPrice,
             description,
             nearbyPlaces: nearbyPlaces.split(',').map(p => p.trim()),
@@ -158,6 +165,24 @@ export default function AddProperty() {
                     dropDownContainerStyle={styles.dropdownList}
                     placeholderTextColor="#888"
                     listMode="SCROLLVIEW" // ✅ Important fix
+                    zIndex={3000}
+                    zIndexInverse={1000}
+                />
+                <DropDownPicker
+                    open={currencyOpen}
+                    value={currency}
+                    items={currencyItems}
+                    setOpen={setCurrencyOpen}
+                    setValue={setCurrency}
+                    setItems={setCurrencyItems}
+                    placeholder="Select currency"
+                    containerStyle={styles.dropdownContainer}
+                    style={styles.dropdown}
+                    dropDownContainerStyle={styles.dropdownList}
+                    placeholderTextColor="#888"
+                    listMode="SCROLLVIEW"
+                    zIndex={2000}
+                    zIndexInverse={2000}
                 />
                 <TextInput style={styles.input} placeholder="Price" value={price} onChangeText={setPrice} keyboardType="numeric" placeholderTextColor="#888" />
                 <TextInput

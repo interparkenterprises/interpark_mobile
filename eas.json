@@ -9,14 +9,18 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "${EXPO_PUBLIC_API_BASE_URL}",
-        "GEOCODING_API_KEY": "${GEOCODING_API_KEY}"
+        "GEOCODING_API_KEY": "${GEOCODING_API_KEY}",
+        "BACKEND_URL":"${BACKEND_URL}",
+        "GOOGLE_WEB_CLIENT_ID":"${GOOGLE_WEB_CLIENT_ID}"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "${EXPO_PUBLIC_API_BASE_URL}",
-        "GEOCODING_API_KEY": "${GEOCODING_API_KEY}"
+        "GEOCODING_API_KEY": "${GEOCODING_API_KEY}",
+        "BACKEND_URL":"${BACKEND_URL}",
+        "GOOGLE_WEB_CLIENT_ID":"${GOOGLE_WEB_CLIENT_ID}"
       }
     },
     "production": {
@@ -24,7 +28,9 @@
       "distribution": "store",
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "${EXPO_PUBLIC_API_BASE_URL}",
-        "GEOCODING_API_KEY": "${GEOCODING_API_KEY}"
+        "GEOCODING_API_KEY": "${GEOCODING_API_KEY}",
+        "BACKEND_URL":"${BACKEND_URL}",
+        "GOOGLE_WEB_CLIENT_ID":"${GOOGLE_WEB_CLIENT_ID}"
       }
     }
   },

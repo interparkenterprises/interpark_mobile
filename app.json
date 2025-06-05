@@ -1,5 +1,6 @@
 {
   "expo": {
+    "owner": "masterkelvin",
     "name": "InterPark",
     "slug": "InterPark",
     "version": "1.0.0",
@@ -57,8 +58,8 @@
             "BROWSABLE"
           ]
         }
-      ],
-      "googleServicesFile": "./google-services.json"
+      ]
+      
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -67,10 +68,9 @@
       "apiUrl": "${EXPO_PUBLIC_API_BASE_URL}",
       "eas": {
         "projectId": "db6634eb-4587-4a79-bbd7-cc68a84471f5"
-      },
-      "googleClientIdIos": "${GOOGLE_CLIENT_ID_IOS}",
-      "googleClientIdAndroid": "${GOOGLE_CLIENT_ID_ANDROID}",
-      "googleClientIdWeb": "${GOOGLE_CLIENT_ID_WEB}"
+      }
+     
+      
     },
     "scheme": "interpark",
     "newArchEnabled": true,
@@ -80,12 +80,8 @@
     "plugins": [
       "expo-asset",
       [
-        "expo-build-properties",
-        {
-          "android": {
-            "googleServicesFile": "./google-services.json"
-          }
-        }
+        "expo-build-properties"
+        
       ],
       "expo-router",
       "expo-secure-store"
