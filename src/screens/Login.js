@@ -81,7 +81,7 @@ export default function Login({ navigation }) {
     try {
       console.log('Sending token to backend...');
       const response = await axios.post(
-        `${BACKEND_URL}/api/auth/google`, // Use consistent backend URL
+        `https://interpark-backend.onrender.com/api/auth/google`, // Use consistent backend URL
         { idToken, role: 'CLIENT' }, // Include role parameter (defaulting to CLIENT for login)
         {
           headers: {
@@ -102,7 +102,7 @@ export default function Login({ navigation }) {
         // Preload chat rooms
         try {
           const roomsRes = await axios.get(
-            `${BACKEND_URL}/api/chat/rooms/${response.data.user.id || response.data.user._id}`,
+            `https://interpark-backend.onrender.com/api/chat/rooms/${response.data.user.id || response.data.user._id}`,
             { headers: { Authorization: `Bearer ${response.data.token}` } }
           );
           await AsyncStorage.setItem('userChatRooms', JSON.stringify(roomsRes.data));
@@ -154,8 +154,8 @@ export default function Login({ navigation }) {
       const encodedState = btoa(unescape(encodeURIComponent(state)));
       
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${GOOGLE_WEB_CLIENT_ID}&` +
-        `redirect_uri=${encodeURIComponent(`${BACKEND_URL}/api/auth/google-callback`)}&` +
+        `client_id=70068801043-8mn6l9fa5s9u682touoa1mp713f2qv41.apps.googleusercontent.com&` +
+        `redirect_uri=${encodeURIComponent(`https://interpark-backend.onrender.com/api/auth/google-callback`)}&` +
         `response_type=code&` +
         `scope=openid%20profile%20email&` +
         `state=${encodedState}&` +
@@ -187,7 +187,7 @@ export default function Login({ navigation }) {
     setLoading(true);
     try {
       const { data } = await axios.post(
-        `${EXPO_PUBLIC_API_BASE_URL}/auth/login`,
+        `https://interpark-backend.onrender.com/api/auth/login`,
         { username, password }
       );
 
@@ -198,7 +198,7 @@ export default function Login({ navigation }) {
       // Preload chat rooms
       try {
         const roomsRes = await axios.get(
-          `${EXPO_PUBLIC_API_BASE_URL}/chat/rooms/${data.user.id || data.user._id}`,
+          `https://interpark-backend.onrender.com/api/chat/rooms/${data.user.id || data.user._id}`,
           { headers: { Authorization: `Bearer ${data.token}` } }
         );
         await AsyncStorage.setItem('userChatRooms', JSON.stringify(roomsRes.data));

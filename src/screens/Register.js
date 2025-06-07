@@ -92,7 +92,7 @@ export default function Register({ navigation }) {
     try {
       console.log('Sending token to backend...');
       const response = await axios.post(
-        `${BACKEND_URL}/api/auth/google`,
+        `https://interpark-backend.onrender.com/api/auth/google`,
         { idToken, role },
         {
           headers: {
@@ -154,8 +154,8 @@ export default function Register({ navigation }) {
       const encodedState = btoa(unescape(encodeURIComponent(state)));
       
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${GOOGLE_WEB_CLIENT_ID}&` +
-        `redirect_uri=${encodeURIComponent(`${BACKEND_URL}/api/auth/google-callback`)}&` +
+        `client_id=70068801043-8mn6l9fa5s9u682touoa1mp713f2qv41.apps.googleusercontent.com&` +
+        `redirect_uri=${encodeURIComponent(`https://interpark-backend.onrender.com/api/auth/google-callback`)}&` +
         `response_type=code&` +
         `scope=openid%20profile%20email&` +
         `state=${encodedState}&` +
@@ -212,7 +212,7 @@ export default function Register({ navigation }) {
     setLoading(true);
     try {
       const { data: check } = await axios.post(
-        `${BACKEND_URL}/api/auth/verify-user`,
+        `https://interpark-backend.onrender.com/api/auth/verify-user`,
         { email, username }
       );
       
@@ -223,7 +223,7 @@ export default function Register({ navigation }) {
       }
 
       await axios.post(
-        `${BACKEND_URL}/api/auth/register`,
+        `https://interpark-backend.onrender.com/api/auth/register`,
         { username, email, password, role }
       );
       
