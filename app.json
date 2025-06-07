@@ -6,7 +6,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "jsEngine": "jsc",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash.png",
