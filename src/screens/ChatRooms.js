@@ -227,6 +227,7 @@ const ChatRoom = ({ route }) => {
             multiline={true}
         />
     );
+    
     const renderSend = (props) => (
         <Send {...props}>
             <View style={styles.sendButtonContainer}>
@@ -234,7 +235,6 @@ const ChatRoom = ({ route }) => {
             </View>
         </Send>
     );
-    
 
     return chatRoomId ? (
         <View style={styles.container}>
@@ -242,11 +242,25 @@ const ChatRoom = ({ route }) => {
                 <TouchableOpacity onPress={() => navigation.goBack()}>
                     <Icon name="arrow-back" size={24} color="#ffffff" />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={toggleProfileVisibility}>
-                    <Text style={styles.headerText}>
-                        {isAgent ? 'Chatting with Client' : 'Chatting with Agent'}
-                    </Text>
-                </TouchableOpacity>
+                
+                <View style={styles.headerRow}>
+                    <TouchableOpacity onPress={toggleProfileVisibility}>
+                        <Text style={styles.headerText}>
+                            {isAgent ? 'Chatting with Client' : 'Chatting with Agent'}
+                        </Text>
+                    </TouchableOpacity>
+                    
+                    {/* Show call icon only for clients (when chatting with agent) and when profile info is available */}
+                    {!isAgent && profileInfo?.phoneNumber && (
+                        <TouchableOpacity 
+                            onPress={() => handlePhoneCall(profileInfo.phoneNumber)}
+                            style={styles.callIconContainer}
+                        >
+                            <Icon name="call-outline" size={20} color="#ffffff" />
+                        </TouchableOpacity>
+                    )}
+                </View>
+                
                 <Animated.View style={{ height: profileHeight, overflow: 'hidden' }}>
                     {profileInfo && (
                         <View style={styles.profileContainer}>
@@ -330,6 +344,18 @@ const styles = StyleSheet.create({
         color: '#ffffff',
         fontSize: 18,
         marginVertical: 5,
+    },
+    headerRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+        marginVertical: 5,
+    },
+    callIconContainer: {
+        padding: 8,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
     },
     profileContainer: {
         paddingHorizontal: 10,

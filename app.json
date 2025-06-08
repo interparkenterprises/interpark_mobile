@@ -26,6 +26,7 @@
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload property images.",
         "CFBundleURLTypes": [
           {
+            "CFBundleURLName": "interpark-auth",
             "CFBundleURLSchemes": [
               "interpark"
             ]
@@ -57,9 +58,21 @@
             "DEFAULT",
             "BROWSABLE"
           ]
+        },
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "https",
+              "host": "interpark-backend.onrender.com"
+            }
+          ],
+          "category": [
+            "DEFAULT",
+            "BROWSABLE"
+          ]
         }
       ]
-      
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -69,8 +82,6 @@
       "eas": {
         "projectId": "db6634eb-4587-4a79-bbd7-cc68a84471f5"
       }
-     
-      
     },
     "scheme": "interpark",
     "newArchEnabled": true,
@@ -80,8 +91,12 @@
     "plugins": [
       "expo-asset",
       [
-        "expo-build-properties"
-        
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": false
+          }
+        }
       ],
       "expo-router",
       "expo-secure-store"

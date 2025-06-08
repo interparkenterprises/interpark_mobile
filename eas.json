@@ -8,29 +8,29 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "${EXPO_PUBLIC_API_BASE_URL}",
-        "GEOCODING_API_KEY": "${GEOCODING_API_KEY}",
-        "BACKEND_URL":"${BACKEND_URL}",
-        "GOOGLE_WEB_CLIENT_ID":"${GOOGLE_WEB_CLIENT_ID}"
+        "EXPO_PUBLIC_API_BASE_URL": "https://interpark-backend.onrender.com/api",
+        "GEOCODING_API_KEY": "4ffae60464eb4730a352c90f9cefd35c",
+        "BACKEND_URL":"https://interpark-backend.onrender.com",
+        "GOOGLE_WEB_CLIENT_ID":"70068801043-8mn6l9fa5s9u682touoa1mp713f2qv41.apps.googleusercontent.com"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "${EXPO_PUBLIC_API_BASE_URL}",
-        "GEOCODING_API_KEY": "${GEOCODING_API_KEY}",
-        "BACKEND_URL":"${BACKEND_URL}",
-        "GOOGLE_WEB_CLIENT_ID":"${GOOGLE_WEB_CLIENT_ID}"
+        "EXPO_PUBLIC_API_BASE_URL": "https://interpark-backend.onrender.com/api",
+        "GEOCODING_API_KEY": "4ffae60464eb4730a352c90f9cefd35c",
+        "BACKEND_URL":"https://interpark-backend.onrender.com",
+        "GOOGLE_WEB_CLIENT_ID":"70068801043-8mn6l9fa5s9u682touoa1mp713f2qv41.apps.googleusercontent.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "${EXPO_PUBLIC_API_BASE_URL}",
-        "GEOCODING_API_KEY": "${GEOCODING_API_KEY}",
-        "BACKEND_URL":"${BACKEND_URL}",
-        "GOOGLE_WEB_CLIENT_ID":"${GOOGLE_WEB_CLIENT_ID}"
+        "EXPO_PUBLIC_API_BASE_URL": "https://interpark-backend.onrender.com/api",
+        "GEOCODING_API_KEY": "4ffae60464eb4730a352c90f9cefd35c",
+        "BACKEND_URL":"https://interpark-backend.onrender.com",
+        "GOOGLE_WEB_CLIENT_ID":"70068801043-8mn6l9fa5s9u682touoa1mp713f2qv41.apps.googleusercontent.com"
       }
     }
   },

@@ -1,3 +1,4 @@
+// Register.js
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -12,17 +13,59 @@ import {
   Platform,
 } from 'react-native';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DropDownPicker from 'react-native-dropdown-picker';
 import BouncyCheckbox from 'react-native-bouncy-checkbox';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as WebBrowser from 'expo-web-browser';
-import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import {
   GOOGLE_WEB_CLIENT_ID,
   BACKEND_URL,
 } from '@env';
 
 WebBrowser.maybeCompleteAuthSession();
+
+// Cross-platform base64 encoding function (same as Login.js)
+const base64Encode = (str) => {
+  try {
+    // For React Native production builds
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(str, 'utf8').toString('base64');
+    }
+    
+    // For Expo Go and development
+    if (typeof btoa !== 'undefined') {
+      return btoa(unescape(encodeURIComponent(str)));
+    }
+    
+    // If both fail, use URL encoding as fallback
+    console.warn('Base64 encoding not available, using URL encoding fallback');
+    return encodeURIComponent(str);
+  } catch (error) {
+    console.error('Base64 encoding error:', error);
+    // Return URL encoded string as final fallback
+    return encodeURIComponent(str);
+  }
+};
+
+// Helper function to clean role string
+const cleanRole = (roleString) => {
+  if (!roleString) return null;
+  
+  // Remove any trailing characters like #, &, whitespace, etc.
+  const cleaned = roleString.trim().replace(/[#&\s]+$/, '');
+  
+  console.log('Cleaning role:', roleString, '->', cleaned);
+  
+  // Validate the cleaned role
+  if (['CLIENT', 'AGENT_LANDLORD'].includes(cleaned)) {
+    return cleaned;
+  }
+  
+  console.warn('Invalid role after cleaning:', cleaned);
+  return null;
+};
 
 export default function Register({ navigation }) {
   const [email, setEmail] = useState('');
@@ -34,19 +77,19 @@ export default function Register({ navigation }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([
     { label: 'Register as a Client', value: 'CLIENT' },
-    { label: 'Register as an Agent/Landlord', value: 'AGENT_LANDLORD' } // Fixed typo here
+    { label: 'Register as an Agent/Landlord', value: 'AGENT_LANDLORD' }
   ]);
   const [isTermsChecked, setTermsChecked] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  // Deep linking handler
+  // Enhanced deep linking handler
   const handleDeepLink = async (event) => {
     let url;
     
     if (typeof event === 'string') {
       url = event;
-    } else if (event.url) {
+    } else if (event && event.url) {
       url = event.url;
     } else {
       console.log('No URL found in deep link event');
@@ -55,29 +98,61 @@ export default function Register({ navigation }) {
 
     console.log('Processing deep link:', url);
     
-    if (url.includes('interpark://google-auth')) {
+    // Handle both interpark:// and https:// schemes
+    if (url.includes('google-auth') || url.includes('interpark://')) {
       try {
-        const params = new URLSearchParams(url.split('?')[1]);
-        const token = params.get('token');
-        // FIX: Decode and clean the role parameter
-        let role = params.get('role');
-        if (role) {
-          role = decodeURIComponent(role).trim(); // Remove any extra characters
-          // Ensure it's a valid role
-          if (!['CLIENT', 'AGENT_LANDLORD'].includes(role)) {
-            role = 'CLIENT'; // Default fallback
-          }
+        let params;
+        
+        if (url.includes('?')) {
+          // Split by ? and get the query part, then split by # to remove any fragments
+          const urlParts = url.split('?');
+          const queryPart = urlParts[1];
+          
+          // Remove any URL fragments (everything after #)
+          const cleanQueryPart = queryPart.split('#')[0];
+          
+          console.log('Original query part:', queryPart);
+          console.log('Cleaned query part:', cleanQueryPart);
+          
+          params = new URLSearchParams(cleanQueryPart);
         } else {
-          role = 'CLIENT'; // Default fallback
+          console.log('No query parameters found in URL');
+          return;
+        }
+        
+        const token = params.get('token');
+        const roleFromUrl = params.get('role');
+        const error = params.get('error');
+        
+        if (error) {
+          console.error('OAuth error:', error);
+          Alert.alert('Authentication Error', error);
+          return;
         }
         
         console.log('Extracted token:', token);
-        console.log('Extracted and cleaned role:', role);
+        console.log('Extracted role from URL (raw):', roleFromUrl);
+        console.log('Current selected role:', role);
         
         if (token) {
-          await handleGoogleToken(token, role);
+          // Clean the role from URL and validate
+          const cleanedRoleFromUrl = cleanRole(roleFromUrl);
+          const cleanedSelectedRole = cleanRole(role);
+          
+          // Use cleaned role from URL or fall back to cleaned selected role
+          let finalRole = cleanedRoleFromUrl || cleanedSelectedRole || 'CLIENT';
+          
+          // Double-check that the final role is valid
+          if (!['CLIENT', 'AGENT_LANDLORD'].includes(finalRole)) {
+            console.warn('Final role validation failed, using CLIENT as fallback:', finalRole);
+            finalRole = 'CLIENT';
+          }
+          
+          console.log('Final role being sent to backend:', finalRole);
+          await handleGoogleToken(token, finalRole);
         } else {
           console.log('No token found in deep link');
+          Alert.alert('Error', 'No authentication token received');
         }
       } catch (error) {
         console.error('Error processing deep link:', error);
@@ -86,48 +161,125 @@ export default function Register({ navigation }) {
     }
   };
 
-  const handleGoogleToken = async (idToken, role) => {
-    console.log('Handling Google token for role:', role);
+  useEffect(() => {
+    let subscription;
+
+    // Set up the linking event listener
+    const setupLinking = async () => {
+      subscription = Linking.addEventListener('url', handleDeepLink);
+
+      // Check if app was opened via deep link
+      try {
+        const initialUrl = await Linking.getInitialURL();
+        if (initialUrl) {
+          console.log('Initial URL:', initialUrl);
+          if (initialUrl.includes('google-auth') || initialUrl.includes('interpark://')) {
+            handleDeepLink(initialUrl);
+          }
+        }
+      } catch (error) {
+        console.error('Error getting initial URL:', error);
+      }
+    };
+
+    setupLinking();
+
+    return () => {
+      if (subscription) {
+        subscription.remove();
+      }
+    };
+  }, [role]); // Added role dependency to ensure latest role is used
+
+  // Called once we get idToken from the deep link
+  const handleGoogleToken = async (idToken, userRole) => {
+    console.log('Handling Google token for registration with role:', userRole);
+    
+    // Clean and validate role before sending to backend
+    const cleanedRole = cleanRole(userRole);
+    if (!cleanedRole) {
+      console.error('Invalid role detected before sending to backend:', userRole);
+      Alert.alert('Error', 'Invalid role selected. Please try again.');
+      setGoogleLoading(false);
+      return;
+    }
+    
     setGoogleLoading(true);
     try {
-      console.log('Sending token to backend...');
+      console.log('Sending token to backend with cleaned role:', cleanedRole);
       const response = await axios.post(
-        `https://interpark-backend.onrender.com/api/auth/google`,
-        { idToken, role },
+        `${BACKEND_URL || 'https://interpark-backend.onrender.com'}/api/auth/google`,
+        { 
+          idToken: idToken, 
+          role: cleanedRole 
+        },
         {
           headers: {
             'Content-Type': 'application/json',
           },
-          timeout: 10000,
+          timeout: 15000, // Increased timeout
         }
       );
 
       console.log('Google auth response:', response.data);
 
       if (response.data.token) {
-        await SecureStore.setItemAsync('authToken', response.data.token);
-        
+        // Save auth data
+        await AsyncStorage.setItem('auth_token', response.data.token);
+        await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
+        await AsyncStorage.setItem('userId', response.data.user.id || response.data.user._id);
+
+        // Preload chat rooms
+        try {
+          const roomsRes = await axios.get(
+            `${BACKEND_URL || 'https://interpark-backend.onrender.com'}/api/chat/rooms/${response.data.user.id || response.data.user._id}`,
+            { 
+              headers: { Authorization: `Bearer ${response.data.token}` },
+              timeout: 10000
+            }
+          );
+          await AsyncStorage.setItem('userChatRooms', JSON.stringify(roomsRes.data));
+        } catch (err) {
+          console.warn('Could not preload chat rooms:', err);
+        }
+
         Alert.alert(
           'Welcome!', 
           response.data.message || 'Google registration successful',
           [
             {
               text: 'OK',
-              onPress: () => navigation.navigate('Login')
+              onPress: () => {
+                // Navigate to appropriate dashboard based on user role
+                const dashboardRoute = response.data.user.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard';
+                console.log('Navigating to:', dashboardRoute, 'for user role:', response.data.user.role);
+                navigation.replace(dashboardRoute);
+              }
             }
           ]
         );
+      } else {
+        throw new Error('No token received from server');
       }
     } catch (error) {
-      console.error('Google login error:', error);
+      console.error('Google registration error:', error);
       let errorMessage = 'Failed to authenticate with Google';
       
       if (error.response) {
+        console.log('Error response status:', error.response.status);
         console.log('Error response data:', error.response.data);
-        errorMessage = error.response.data.error || errorMessage;
+        errorMessage = error.response.data.error || error.response.data.message || errorMessage;
+        
+        // Specific handling for role validation error
+        if (error.response.status === 400 && error.response.data.error === 'Invalid role specified') {
+          errorMessage = `Invalid role "${cleanedRole}" specified. Please select a valid role and try again.`;
+        }
       } else if (error.request) {
         console.log('Error request:', error.request);
-        errorMessage = 'No response from server';
+        errorMessage = 'No response from server. Please check your internet connection.';
+      } else {
+        console.log('Error message:', error.message);
+        errorMessage = error.message;
       }
       
       Alert.alert('Google Registration Failed', errorMessage);
@@ -136,6 +288,7 @@ export default function Register({ navigation }) {
     }
   };
 
+  // Enhanced Google sign-in with better error handling
   const handleGoogleSignIn = async () => {
     if (!role) {
       Alert.alert('Error', 'Please select your role first');
@@ -147,39 +300,78 @@ export default function Register({ navigation }) {
       return;
     }
 
-    console.log('Starting Google sign-in for role:', role);
+    // Clean and validate role
+    const cleanedRole = cleanRole(role);
+    if (!cleanedRole) {
+      Alert.alert('Error', 'Please select a valid role');
+      return;
+    }
+
+    console.log('Starting Google sign-in for registration with role:', cleanedRole);
     setGoogleLoading(true);
+    
     try {
-      const state = JSON.stringify({ role });
-      const encodedState = btoa(unescape(encodeURIComponent(state)));
+      // Check if we're in development or production
+      const isDev = __DEV__ || Constants.executionEnvironment === 'storeClient';
       
+      const state = JSON.stringify({ 
+        role: cleanedRole, // Use cleaned role
+        platform: Platform.OS,
+        isDev: isDev,
+        action: 'register', // Add action to distinguish from login
+        timestamp: Date.now() // Add timestamp for debugging
+      });
+      
+      // Use our cross-platform base64 encoding function
+      const encodedState = base64Encode(state);
+      
+      console.log('State object:', state);
+      console.log('Encoded state:', encodedState);
+      
+      const backendUrl = BACKEND_URL || 'https://interpark-backend.onrender.com';
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=70068801043-8mn6l9fa5s9u682touoa1mp713f2qv41.apps.googleusercontent.com&` +
-        `redirect_uri=${encodeURIComponent(`https://interpark-backend.onrender.com/api/auth/google-callback`)}&` +
+        `client_id=${GOOGLE_WEB_CLIENT_ID}&` +
+        `redirect_uri=${encodeURIComponent(`${backendUrl}/api/auth/google-callback`)}&` +
         `response_type=code&` +
         `scope=openid%20profile%20email&` +
         `state=${encodedState}&` +
         `prompt=select_account`;
 
       console.log('Opening Google auth URL:', authUrl);
+      console.log('Environment check - __DEV__:', __DEV__, 'Platform:', Platform.OS);
+      console.log('Constants.executionEnvironment:', Constants.executionEnvironment);
       
       await WebBrowser.warmUpAsync();
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, 'interpark://');
+      
+      const result = await WebBrowser.openAuthSessionAsync(
+        authUrl, 
+        'interpark://',
+        {
+          showInRecents: true,
+        }
+      );
+      
       console.log('WebBrowser result:', result);
       
-      if (result.url) {
-        await handleDeepLink(result);
+      if (result.type === 'success' && result.url) {
+        await handleDeepLink(result.url);
+      } else if (result.type === 'cancel') {
+        console.log('User cancelled Google sign-in');
+        Alert.alert('Cancelled', 'Google sign-in was cancelled');
+      } else {
+        console.log('Google sign-in result:', result);
+        Alert.alert('Error', 'Failed to complete Google sign-in');
       }
     } catch (error) {
       console.error('Google sign-in error:', error);
-      Alert.alert('Error', 'Failed to initiate Google sign-in');
+      Alert.alert('Error', `Failed to initiate Google sign-in: ${error.message}`);
     } finally {
       await WebBrowser.coolDownAsync();
       setGoogleLoading(false);
     }
   };
 
-  // ... rest of your component code (styles, other handlers, render method) ...
+  // Validation functions
   const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
   
   const validateInputs = () => {
@@ -199,21 +391,36 @@ export default function Register({ navigation }) {
       Alert.alert('Error', 'You must accept the terms and conditions');
       return false;
     }
+    const cleanedRole = cleanRole(role);
+    if (!cleanedRole) {
+      Alert.alert('Error', 'Please select a valid role');
+      return false;
+    }
     return true;
   };
 
+  // Regular (form-based) registration
   const handleRegister = async () => {
     if (!validateInputs() || !role) {
       if (!role) Alert.alert('Error', 'Please select your role');
       return;
     }
     
-    console.log('Starting regular registration');
+    const cleanedRole = cleanRole(role);
+    if (!cleanedRole) {
+      Alert.alert('Error', 'Please select a valid role');
+      return;
+    }
+    
+    console.log('Starting regular registration with role:', cleanedRole);
     setLoading(true);
     try {
+      const backendUrl = BACKEND_URL || 'https://interpark-backend.onrender.com';
+      
       const { data: check } = await axios.post(
-        `https://interpark-backend.onrender.com/api/auth/verify-user`,
-        { email, username }
+        `${backendUrl}/api/auth/verify-user`,
+        { email, username },
+        { timeout: 10000 }
       );
       
       if (check.exists) {
@@ -223,8 +430,9 @@ export default function Register({ navigation }) {
       }
 
       await axios.post(
-        `https://interpark-backend.onrender.com/api/auth/register`,
-        { username, email, password, role }
+        `${backendUrl}/api/auth/register`,
+        { username, email, password, role: cleanedRole },
+        { timeout: 10000 }
       );
       
       Alert.alert(
@@ -343,6 +551,10 @@ export default function Register({ navigation }) {
         containerStyle={styles.dropdownContainer}
         style={styles.dropdown}
         dropDownContainerStyle={styles.dropdownList}
+        onChangeValue={(value) => {
+          console.log('Role selected:', value);
+          setRole(value);
+        }}
       />
 
       <BouncyCheckbox
@@ -429,6 +641,16 @@ export default function Register({ navigation }) {
           Already have an account? Login
         </Text>
       </TouchableOpacity>
+      
+      {/* Debug info - remove in production */}
+      {/*
+      {__DEV__ && (
+        <View style={styles.debugContainer}>
+          <Text style={styles.debugText}>Debug: Selected Role: {role}</Text>
+          <Text style={styles.debugText}>Debug: Cleaned Role: {cleanRole(role)}</Text>
+          <Text style={styles.debugText}>Terms Checked: {isTermsChecked.toString()}</Text>
+        </View>
+      )}*/}
     </View>
   );
 }
@@ -555,5 +777,15 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  debugContainer: {
+    marginTop: 20,
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 5,
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#333',
   },
 });
