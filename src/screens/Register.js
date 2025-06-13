@@ -73,6 +73,7 @@ export default function Register({ navigation }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [secureTextEntry, setSecureTextEntry] = useState(true);
+  const [secureConfirmTextEntry, setSecureConfirmTextEntry] = useState(true);
   const [role, setRole] = useState('');
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([
@@ -480,6 +481,7 @@ export default function Register({ navigation }) {
         autoCapitalize="none"
       />
 
+      {/* PASSWORD FIELD - FIXED */}
       <View style={styles.passwordContainer}>
         <TextInput
           style={styles.passwordInput}
@@ -488,6 +490,16 @@ export default function Register({ navigation }) {
           value={password}
           onChangeText={setPassword}
           secureTextEntry={secureTextEntry}
+          textContentType="newPassword"
+          passwordRules="minlength: 6;"
+          autoComplete="new-password"
+          autoCorrect={false}
+          spellCheck={false}
+          importantForAutofill="no"
+          keyboardType="default"
+          blurOnSubmit={true}
+          // Force re-render when visibility changes
+          key={`password-${secureTextEntry}`}
         />
         <TouchableOpacity
           style={styles.eyeIcon}
@@ -501,6 +513,7 @@ export default function Register({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* CONFIRM PASSWORD FIELD - FIXED */}
       <View
         style={[
           styles.passwordContainer,
@@ -526,14 +539,24 @@ export default function Register({ navigation }) {
           }
           value={confirmPassword}
           onChangeText={setConfirmPassword}
-          secureTextEntry={secureTextEntry}
+          secureTextEntry={secureConfirmTextEntry}
+          textContentType="newPassword"
+          passwordRules="minlength: 6;"
+          autoComplete="new-password"
+          autoCorrect={false}
+          spellCheck={false}
+          importantForAutofill="no"
+          keyboardType="default"
+          blurOnSubmit={true}
+          // Force re-render when visibility changes
+          key={`confirmPassword-${secureConfirmTextEntry}`}
         />
         <TouchableOpacity
           style={styles.eyeIcon}
-          onPress={() => setSecureTextEntry(!secureTextEntry)}
+          onPress={() => setSecureConfirmTextEntry(!secureConfirmTextEntry)}
         >
           <Icon
-            name={secureTextEntry ? 'eye-off' : 'eye'}
+            name={secureConfirmTextEntry ? 'eye-off' : 'eye'}
             size={24}
             color="gray"
           />
@@ -696,6 +719,9 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: 'white',
     fontSize: 16,
+    // Additional styles for better password handling in APK
+    fontFamily: Platform.OS === 'android' ? 'monospace' : 'System',
+    letterSpacing: Platform.OS === 'android' ? 1 : 0,
   },
   eyeIcon: {
     position: 'absolute',

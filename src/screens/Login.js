@@ -87,6 +87,7 @@ export default function Login({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [isPasswordVisible, setPasswordVisible] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
 
   // Enhanced deep linking handler
   const handleDeepLink = async (event) => {
@@ -387,6 +388,20 @@ export default function Login({ navigation }) {
     }
   };
 
+  // Toggle password visibility handler
+  const togglePasswordVisibility = () => {
+    setPasswordVisible(!isPasswordVisible);
+  };
+
+  // Password input handlers
+  const handlePasswordFocus = () => {
+    setIsPasswordFocused(true);
+  };
+
+  const handlePasswordBlur = () => {
+    setIsPasswordFocused(false);
+  };
+
   return (
     <View style={styles.container}>
       <Image source={require('../../assets/logo.png')} style={styles.logo} />
@@ -395,25 +410,53 @@ export default function Login({ navigation }) {
       <TextInput
         style={styles.input}
         placeholder="Username or Email"
-        placeholderTextColor="black"
+        placeholderTextColor="#666"
         value={username}
         onChangeText={setUsername}
         autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="username"
       />
-      <View style={styles.passwordContainer}>
+      
+      <View style={[
+        styles.passwordContainer,
+        isPasswordFocused && styles.passwordContainerFocused
+      ]}>
         <TextInput
           style={styles.passwordInput}
           placeholder="Password"
-          placeholderTextColor="black"
+          placeholderTextColor="#666"
           value={password}
           onChangeText={setPassword}
           secureTextEntry={!isPasswordVisible}
+          onFocus={handlePasswordFocus}
+          onBlur={handlePasswordBlur}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="password"
+          textContentType="password"
+          passwordRules="minlength: 6;"
+          // Force re-render to fix visibility issues
+          key={`password-${isPasswordVisible}`}
+          // Additional props to ensure proper behavior
+          enablesReturnKeyAutomatically={true}
+          returnKeyType="done"
+          clearButtonMode="never"
+          // Ensure proper text rendering
+          allowFontScaling={true}
+          // Fix for Android APK builds
+          underlineColorAndroid="transparent"
         />
         <TouchableOpacity
-          onPress={() => setPasswordVisible(!isPasswordVisible)}
+          onPress={togglePasswordVisibility}
           style={styles.eyeIcon}
+          activeOpacity={0.7}
         >
-          <Icon name={isPasswordVisible ? 'eye' : 'eye-off'} size={24} color="gray" />
+          <Icon 
+            name={isPasswordVisible ? 'eye' : 'eye-off'} 
+            size={24} 
+            color="#666" 
+          />
         </TouchableOpacity>
       </View>
 
@@ -425,9 +468,13 @@ export default function Login({ navigation }) {
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.loginButton}
+        style={[
+          styles.loginButton,
+          loading && styles.disabledButton
+        ]}
         onPress={handleLogin}
         disabled={loading}
+        activeOpacity={0.8}
       >
         {loading ? (
           <ActivityIndicator size="small" color="white" />
@@ -443,6 +490,7 @@ export default function Login({ navigation }) {
         ]}
         onPress={handleGoogleSignIn}
         disabled={googleLoading}
+        activeOpacity={0.8}
       >
         {googleLoading ? (
           <ActivityIndicator size="small" color="white" />
@@ -460,6 +508,7 @@ export default function Login({ navigation }) {
       <TouchableOpacity
         style={styles.registerLink}
         onPress={() => navigation.navigate('Register')}
+        activeOpacity={0.7}
       >
         <Text style={styles.registerText}>Don't have an account? Register</Text>
       </TouchableOpacity>
@@ -504,27 +553,48 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     marginBottom: 15,
     fontSize: 16,
+    color: '#000',
+    // Ensure proper text rendering on Android
+    textAlignVertical: 'center',
   },
   passwordContainer: {
     position: 'relative',
     marginBottom: 5,
-  },
-  passwordInput: {
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
-    padding: 12,
     backgroundColor: 'white',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  passwordContainerFocused: {
+    borderColor: '#005478',
+    borderWidth: 2,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 12,
     fontSize: 16,
+    color: '#000',
+    backgroundColor: 'transparent',
+    // Remove default styling that might interfere
+    borderWidth: 0,
+    // Ensure proper text rendering on Android
+    textAlignVertical: 'center',
+    // Fix for secure text entry visibility
+    fontFamily: Platform.OS === 'android' ? 'monospace' : 'System',
   },
   eyeIcon: {
     position: 'absolute',
-    right: 15,
-    top: 12,
+    right: 12,
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   forgotPasswordLink: {
     alignSelf: 'flex-end',
     marginBottom: 15,
+    paddingVertical: 5,
   },
   forgotPasswordText: {
     color: '#005478',
@@ -538,6 +608,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 15,
     elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   buttonText: {
     color: 'white',
@@ -553,6 +630,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 15,
     elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   googleButtonText: {
     color: 'white',
@@ -566,6 +650,7 @@ const styles = StyleSheet.create({
   },
   registerLink: {
     alignItems: 'center',
+    paddingVertical: 10,
   },
   registerText: {
     color: '#005478',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { GiftedChat, InputToolbar, Composer, Send } from 'react-native-gifted-chat';
 import io from 'socket.io-client';
 import {
@@ -10,7 +10,8 @@ import {
     TouchableOpacity,
     Image,
     Animated,
-    Linking
+    Linking,
+    BackHandler
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -29,6 +30,68 @@ const ChatRoom = ({ route }) => {
 
     const socket = io('https://interpark-backend.onrender.com');
 
+    // Safe navigation handler
+    const handleBackPress = useCallback(() => {
+        try {
+            console.log('Back button pressed');
+            console.log('Can go back:', navigation.canGoBack());
+            
+            // Disconnect socket before navigation
+            if (socket) {
+                socket.disconnect();
+            }
+            
+            // Check if we can go back safely
+            if (navigation.canGoBack()) {
+                navigation.goBack();
+            } else {
+                // If we can't go back, navigate to a specific safe screen
+                // Replace 'Properties' with your actual Properties screen name
+                navigation.navigate('Properties');
+            }
+        } catch (error) {
+            console.error('Navigation error:', error);
+            
+            // Show user feedback and provide fallback
+            Alert.alert(
+                'Navigation Error', 
+                'Returning to main screen.',
+                [
+                    {
+                        text: 'OK',
+                        onPress: () => {
+                            try {
+                                // Reset navigation stack as fallback
+                                navigation.reset({
+                                    index: 0,
+                                    routes: [{ name: 'Properties' }], // Replace with your main screen name
+                                });
+                            } catch (resetError) {
+                                console.error('Reset navigation error:', resetError);
+                                // Ultimate fallback - close the app gracefully
+                                BackHandler.exitApp();
+                            }
+                        }
+                    }
+                ]
+            );
+        }
+    }, [navigation, socket]);
+
+    // Handle hardware back button (Android)
+    useEffect(() => {
+        const backAction = () => {
+            handleBackPress();
+            return true; // Prevent default behavior
+        };
+
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+
+        return () => {
+            backHandler.remove();
+        };
+    }, [handleBackPress]);
+
     useEffect(() => {
         const requestPermissions = async () => {
             if (Platform.OS === 'ios' || (Platform.OS === 'android' && Device.osBuildNumber >= 33)) {
@@ -40,13 +103,17 @@ const ChatRoom = ({ route }) => {
     }, []);
 
     const showNotification = async (title, message) => {
-        await Notifications.scheduleNotificationAsync({
-            content: {
-                title: title,
-                body: message,
-            },
-            trigger: null,
-        });
+        try {
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title: title,
+                    body: message,
+                },
+                trigger: null,
+            });
+        } catch (error) {
+            console.error('Notification error:', error);
+        }
     };
 
     const handlePhoneCall = (phoneNumber) => {
@@ -80,12 +147,13 @@ const ChatRoom = ({ route }) => {
         const fetchMessages = async () => {
             try {
                 const response = await axios.get(`https://interpark-backend.onrender.com/api/chat/${chatRoomId}/messages`);
-                setMessages(response.data.map((msg) => ({
+                const formattedMessages = response.data.map((msg) => ({
                     _id: msg.id,
                     text: msg.content,
                     createdAt: new Date(msg.timestamp),
                     user: { _id: msg.senderId },
-                })));
+                }));
+                setMessages(formattedMessages);
             } catch (error) {
                 console.error('Error fetching messages:', error);
                 Alert.alert('Error', 'Failed to load messages.');
@@ -117,31 +185,38 @@ const ChatRoom = ({ route }) => {
         fetchMessages();
         fetchProfileData();
 
-        socket.emit('join_room', chatRoomId);
+        // Join socket room
+        if (socket) {
+            socket.emit('join_room', chatRoomId);
 
-        socket.on('receive_message', (incomingMessage) => {
-            setMessages(prevMessages => {
-                // Remove any optimistic message with matching content
-                const filtered = prevMessages.filter(msg => 
-                    !(msg.isOptimistic && msg.text === incomingMessage.content)
-                );
-                
-                const newMessage = {
-                    _id: incomingMessage.id,
-                    text: incomingMessage.content,
-                    createdAt: new Date(incomingMessage.timestamp),
-                    user: { _id: incomingMessage.senderId },
-                };
-                
-                return GiftedChat.prepend(filtered, newMessage);
+            socket.on('receive_message', (incomingMessage) => {
+                setMessages(prevMessages => {
+                    // Remove any optimistic message with matching content
+                    const filtered = prevMessages.filter(msg => 
+                        !(msg.isOptimistic && msg.text === incomingMessage.content)
+                    );
+                    
+                    const newMessage = {
+                        _id: incomingMessage.id,
+                        text: incomingMessage.content,
+                        createdAt: new Date(incomingMessage.timestamp),
+                        user: { _id: incomingMessage.senderId },
+                    };
+                    
+                    return GiftedChat.prepend(filtered, newMessage);
+                });
+                showNotification('New Message', incomingMessage.content);
             });
-            showNotification('New Message', incomingMessage.content);
-        });
+        }
 
+        // Cleanup function
         return () => {
-            socket.disconnect();
+            if (socket) {
+                socket.off('receive_message');
+                socket.disconnect();
+            }
         };
-    }, [chatRoomId, userType, agentLandlordId, clientId]);
+    }, [chatRoomId, userType, agentLandlordId, clientId, socket]);
 
     const onSend = async (newMessages = []) => {
         const message = newMessages[0];
@@ -162,7 +237,9 @@ const ChatRoom = ({ route }) => {
 
         try {
             await axios.post(`https://interpark-backend.onrender.com/api/chat/send`, fullMessage);
-            socket.emit('send_message', fullMessage);
+            if (socket) {
+                socket.emit('send_message', fullMessage);
+            }
         } catch (error) {
             console.error('Error sending message:', error);
             // Mark message as failed
@@ -236,10 +313,25 @@ const ChatRoom = ({ route }) => {
         </Send>
     );
 
-    return chatRoomId ? (
+    // Early return for no chat room
+    if (!chatRoomId) {
+        return (
+            <View style={styles.noConversation}>
+                <Text>No Conversations have been initiated yet.</Text>
+                <TouchableOpacity 
+                    style={styles.backButton} 
+                    onPress={handleBackPress}
+                >
+                    <Text style={styles.backButtonText}>Go Back</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    }
+
+    return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()}>
+                <TouchableOpacity onPress={handleBackPress} style={styles.backIconContainer}>
                     <Icon name="arrow-back" size={24} color="#ffffff" />
                 </TouchableOpacity>
                 
@@ -266,10 +358,10 @@ const ChatRoom = ({ route }) => {
                         <View style={styles.profileContainer}>
                             {isAgent ? (
                                 <>
-                                    <Text style={styles.profileText}>Client: {profileInfo.user.username}</Text>
-                                    <Text style={styles.profileText}>UserID: {profileInfo.user.id}</Text>
-                                    <Text style={styles.profileText}>Email: {profileInfo.user.email}</Text>
-                                    {profileInfo.user.avatar && (
+                                    <Text style={styles.profileText}>Client: {profileInfo.user?.username || 'Unknown'}</Text>
+                                    <Text style={styles.profileText}>UserID: {profileInfo.user?.id || 'Unknown'}</Text>
+                                    <Text style={styles.profileText}>Email: {profileInfo.user?.email || 'Unknown'}</Text>
+                                    {profileInfo.user?.avatar && (
                                         <Image
                                             source={{ uri: profileInfo.user.avatar }}
                                             style={styles.avatar}
@@ -278,19 +370,19 @@ const ChatRoom = ({ route }) => {
                                 </>
                             ) : (
                                 <>
-                                    <Text style={styles.profileText}>Agent: {profileInfo.user.username}</Text>
+                                    <Text style={styles.profileText}>Agent: {profileInfo.user?.username || 'Unknown'}</Text>
                                     <TouchableOpacity 
                                         onPress={() => handlePhoneCall(profileInfo.phoneNumber)}
                                         style={styles.phoneContainer}
                                     >
                                         <View style={styles.phoneRow}>
                                             <Icon name="call-outline" size={16} color="#ffffff" />
-                                            <Text style={styles.profileText}>Phone: {profileInfo.phoneNumber}</Text>
+                                            <Text style={styles.profileText}>Phone: {profileInfo.phoneNumber || 'Not available'}</Text>
                                         </View>
                                     </TouchableOpacity>
-                                    <Text style={styles.profileText}>Agent ID: {profileInfo.agentNumber}</Text>
-                                    <Text style={styles.profileText}>Email: {profileInfo.user.email}</Text>
-                                    {profileInfo.user.avatar && (
+                                    <Text style={styles.profileText}>Agent ID: {profileInfo.agentNumber || 'Unknown'}</Text>
+                                    <Text style={styles.profileText}>Email: {profileInfo.user?.email || 'Unknown'}</Text>
+                                    {profileInfo.user?.avatar && (
                                         <Image
                                             source={{ uri: profileInfo.user.avatar }}
                                             style={styles.avatar}
@@ -322,10 +414,6 @@ const ChatRoom = ({ route }) => {
                 }}
             />
         </View>
-    ) : (
-        <View style={styles.noConversation}>
-            <Text>No Conversations have been initiated yet.</Text>
-        </View>
     );
 };
 
@@ -351,6 +439,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         width: '100%',
         marginVertical: 5,
+    },
+    backIconContainer: {
+        padding: 8,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        marginBottom: 5,
     },
     callIconContainer: {
         padding: 8,
@@ -410,6 +504,19 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: '#E0E0E0',
+    },
+    backButton: {
+        marginTop: 20,
+        backgroundColor: '#007AFF',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 8,
+    },
+    backButtonText: {
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
     inputToolbar: {
         borderTopWidth: 1,
