@@ -497,9 +497,16 @@ export default function Register({ navigation }) {
           spellCheck={false}
           importantForAutofill="no"
           keyboardType="default"
-          blurOnSubmit={true}
+          //blurOnSubmit={true}
           // Force re-render when visibility changes
           key={`password-${secureTextEntry}`}
+            // Additional recommended props from the first TextInput
+          autoCapitalize="none"
+          enablesReturnKeyAutomatically={true}
+          returnKeyType="done"
+          clearButtonMode="never"
+          allowFontScaling={true}
+          underlineColorAndroid="transparent"
         />
         <TouchableOpacity
           style={styles.eyeIcon}
@@ -547,9 +554,16 @@ export default function Register({ navigation }) {
           spellCheck={false}
           importantForAutofill="no"
           keyboardType="default"
-          blurOnSubmit={true}
+          //blurOnSubmit={true}
           // Force re-render when visibility changes
           key={`confirmPassword-${secureConfirmTextEntry}`}
+            // Additional recommended props from the first TextInput
+          autoCapitalize="none"
+          enablesReturnKeyAutomatically={true}
+          returnKeyType="done"
+          clearButtonMode="never"
+          allowFontScaling={true}
+          underlineColorAndroid="transparent"
         />
         <TouchableOpacity
           style={styles.eyeIcon}
@@ -718,6 +732,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     backgroundColor: 'white',
+    textAlignVertical: 'center',
     fontSize: 16,
     // Additional styles for better password handling in APK
     fontFamily: Platform.OS === 'android' ? 'monospace' : 'System',

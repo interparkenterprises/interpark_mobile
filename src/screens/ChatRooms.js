@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { GiftedChat, InputToolbar, Composer, Send } from 'react-native-gifted-chat';
 import io from 'socket.io-client';
 import {
@@ -13,7 +13,7 @@ import {
     Linking,
     BackHandler
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import axios from 'axios';
 import * as Notifications from 'expo-notifications';
@@ -26,19 +26,46 @@ const ChatRoom = ({ route }) => {
     const [messages, setMessages] = useState([]);
     const [profileInfo, setProfileInfo] = useState(null);
     const [isProfileVisible, setIsProfileVisible] = useState(false);
+    const [showBackButton, setShowBackButton] = useState(false);
     const animation = useState(new Animated.Value(0))[0];
+    const visitCountRef = useRef(0);
+    const socketRef = useRef(null);
 
-    const socket = io('https://interpark-backend.onrender.com');
+    // Initialize socket connection
+    useEffect(() => {
+        socketRef.current = io('https://interpark-backend.onrender.com');
+        return () => {
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+            }
+        };
+    }, []);
+
+    // Track page visits to show/hide back button
+    useFocusEffect(
+        useCallback(() => {
+            visitCountRef.current += 1;
+            
+            // Show back button only from second visit onwards
+            if (visitCountRef.current > 1) {
+                setShowBackButton(true);
+            }
+            
+            return () => {
+                // Cleanup on unfocus if needed
+            };
+        }, [])
+    );
 
     // Safe navigation handler
     const handleBackPress = useCallback(() => {
         try {
-            console.log('Back button pressed');
-            console.log('Can go back:', navigation.canGoBack());
+            //console.log('Back button pressed');
+            //console.log('Can go back:', navigation.canGoBack());
             
             // Disconnect socket before navigation
-            if (socket) {
-                socket.disconnect();
+            if (socketRef.current) {
+                socketRef.current.disconnect();
             }
             
             // Check if we can go back safely
@@ -46,8 +73,7 @@ const ChatRoom = ({ route }) => {
                 navigation.goBack();
             } else {
                 // If we can't go back, navigate to a specific safe screen
-                // Replace 'Properties' with your actual Properties screen name
-                navigation.navigate('Properties');
+                navigation.navigate('PropertiesList');
             }
         } catch (error) {
             console.error('Navigation error:', error);
@@ -64,7 +90,7 @@ const ChatRoom = ({ route }) => {
                                 // Reset navigation stack as fallback
                                 navigation.reset({
                                     index: 0,
-                                    routes: [{ name: 'Properties' }], // Replace with your main screen name
+                                    routes: [{ name: 'PropertiesList' }],
                                 });
                             } catch (resetError) {
                                 console.error('Reset navigation error:', resetError);
@@ -76,12 +102,14 @@ const ChatRoom = ({ route }) => {
                 ]
             );
         }
-    }, [navigation, socket]);
+    }, [navigation]);
 
     // Handle hardware back button (Android)
     useEffect(() => {
         const backAction = () => {
-            handleBackPress();
+            if (showBackButton) {
+                handleBackPress();
+            }
             return true; // Prevent default behavior
         };
 
@@ -90,7 +118,7 @@ const ChatRoom = ({ route }) => {
         return () => {
             backHandler.remove();
         };
-    }, [handleBackPress]);
+    }, [handleBackPress, showBackButton]);
 
     useEffect(() => {
         const requestPermissions = async () => {
@@ -186,15 +214,15 @@ const ChatRoom = ({ route }) => {
         fetchProfileData();
 
         // Join socket room
-        if (socket) {
-            socket.emit('join_room', chatRoomId);
+        if (socketRef.current) {
+            socketRef.current.emit('join_room', chatRoomId);
 
-            socket.on('receive_message', (incomingMessage) => {
-                setMessages(prevMessages => {
-                    // Remove any optimistic message with matching content
-                    const filtered = prevMessages.filter(msg => 
-                        !(msg.isOptimistic && msg.text === incomingMessage.content)
-                    );
+            socketRef.current.on('receive_message', (incomingMessage) => {
+                const currentUserId = userType === 'agent' ? agentLandlordId : clientId;
+                
+                // Only show messages from other users (not our own messages)
+                if (incomingMessage.senderId !== currentUserId) {
+                    console.log('Received message from database:', incomingMessage);
                     
                     const newMessage = {
                         _id: incomingMessage.id,
@@ -203,48 +231,97 @@ const ChatRoom = ({ route }) => {
                         user: { _id: incomingMessage.senderId },
                     };
                     
-                    return GiftedChat.prepend(filtered, newMessage);
-                });
-                showNotification('New Message', incomingMessage.content);
+                    setMessages(prevMessages => {
+                        // Check if message already exists to prevent duplicates
+                        const messageExists = prevMessages.some(msg => 
+                            msg._id === incomingMessage.id || 
+                            (msg.text === incomingMessage.content && 
+                             msg.user._id === incomingMessage.senderId &&
+                             Math.abs(new Date(msg.createdAt) - new Date(incomingMessage.timestamp)) < 1000)
+                        );
+                        
+                        if (messageExists) {
+                            console.log('Duplicate message detected, ignoring:', incomingMessage);
+                            return prevMessages;
+                        }
+                        
+                        return GiftedChat.prepend(prevMessages, newMessage);
+                    });
+                    
+                    // Show notification for messages from others
+                    showNotification('New Message', incomingMessage.content);
+                } else {
+                    // This is our own message coming back from database - just log it
+                    console.log('Own message saved to database:', incomingMessage);
+                }
             });
         }
 
         // Cleanup function
         return () => {
-            if (socket) {
-                socket.off('receive_message');
-                socket.disconnect();
+            if (socketRef.current) {
+                socketRef.current.off('receive_message');
             }
         };
-    }, [chatRoomId, userType, agentLandlordId, clientId, socket]);
+    }, [chatRoomId, userType, agentLandlordId, clientId]);
 
     const onSend = async (newMessages = []) => {
         const message = newMessages[0];
-        const tempId = Date.now().toString(); // Temporary client-side ID
+        const currentUserId = userType === 'agent' ? agentLandlordId : clientId;
+        
         const fullMessage = {
             chatRoomId: chatRoomId,
-            senderId: userType === 'agent' ? agentLandlordId : clientId,
+            senderId: currentUserId,
             content: message.text,
         };
 
-        // Add message immediately with temp ID
-        const optimisticMessage = {
+        // Show message immediately in UI (instant feedback)
+        const instantMessage = {
             ...message,
-            _id: tempId,
-            isOptimistic: true // Flag for tracking
+            _id: `instant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            user: { _id: currentUserId }
         };
-        setMessages((prevMessages) => GiftedChat.prepend(prevMessages, optimisticMessage));
+        
+        setMessages((prevMessages) => GiftedChat.prepend(prevMessages, instantMessage));
 
         try {
-            await axios.post(`https://interpark-backend.onrender.com/api/chat/send`, fullMessage);
-            if (socket) {
-                socket.emit('send_message', fullMessage);
+            // Send to server in background (don't wait for response to show message)
+            axios.post(`https://interpark-backend.onrender.com/api/chat/send`, fullMessage)
+                .then(response => {
+                    console.log('Message saved to database:', response.data);
+                    
+                    // Update the instant message with the real database ID
+                    setMessages(prevMessages => {
+                        return prevMessages.map(msg => {
+                            if (msg._id === instantMessage._id) {
+                                return {
+                                    ...msg,
+                                    _id: response.data.id,
+                                };
+                            }
+                            return msg;
+                        });
+                    });
+                })
+                .catch(error => {
+                    console.error('Error saving message to database:', error);
+                    // Mark message as failed
+                    setMessages(prevMessages => prevMessages.map(msg => 
+                        msg._id === instantMessage._id ? {...msg, isFailed: true} : msg
+                    ));
+                    Alert.alert('Error', 'Failed to send message.');
+                });
+            
+            // Emit via socket for real-time delivery to other users
+            if (socketRef.current) {
+                socketRef.current.emit('send_message', fullMessage);
             }
+            
         } catch (error) {
             console.error('Error sending message:', error);
             // Mark message as failed
             setMessages(prevMessages => prevMessages.map(msg => 
-                msg._id === tempId ? {...msg, isFailed: true} : msg
+                msg._id === instantMessage._id ? {...msg, isFailed: true} : msg
             ));
             Alert.alert('Error', 'Failed to send message.');
         }
@@ -331,9 +408,11 @@ const ChatRoom = ({ route }) => {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <TouchableOpacity onPress={handleBackPress} style={styles.backIconContainer}>
-                    <Icon name="arrow-back" size={24} color="#ffffff" />
-                </TouchableOpacity>
+                {showBackButton && (
+                    <TouchableOpacity onPress={handleBackPress} style={styles.backIconContainer}>
+                        <Icon name="arrow-back" size={24} color="#ffffff" />
+                    </TouchableOpacity>
+                )}
                 
                 <View style={styles.headerRow}>
                     <TouchableOpacity onPress={toggleProfileVisibility}>

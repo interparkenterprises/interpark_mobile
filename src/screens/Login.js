@@ -410,7 +410,7 @@ export default function Login({ navigation }) {
       <TextInput
         style={styles.input}
         placeholder="Username or Email"
-        placeholderTextColor="#666"
+        placeholderTextColor="black"
         value={username}
         onChangeText={setUsername}
         autoCapitalize="none"
@@ -425,7 +425,7 @@ export default function Login({ navigation }) {
         <TextInput
           style={styles.passwordInput}
           placeholder="Password"
-          placeholderTextColor="#666"
+          placeholderTextColor="black"
           value={password}
           onChangeText={setPassword}
           secureTextEntry={!isPasswordVisible}
