@@ -385,7 +385,7 @@ const ChatRoom = ({ route }) => {
     const renderSend = (props) => (
         <Send {...props}>
             <View style={styles.sendButtonContainer}>
-                <Icon name="send" size={24} color="#007AFF" />
+                <Icon name="send" size={24} color="#005478" />
             </View>
         </Send>
     );

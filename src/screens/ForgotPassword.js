@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   resetButton: {
-    backgroundColor: '#1E90FF',
+    backgroundColor: '#005478',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',

@@ -6,9 +6,10 @@ import React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AppNavigator from './src/navigation/AppNavigator';
 import { NavigationContainer } from '@react-navigation/native';
+import { Linking } from 'react-native';
 
 const linking = {
-  // Recognize both your app’s scheme and your backend’s https:// URL
+  // Recognize both your app's scheme and your backend's https:// URL
   prefixes: [
     'interpark://',                                      // mobile deep link
     'https://interpark-backend.onrender.com',            // web fallback
@@ -19,6 +20,24 @@ const linking = {
       ResetPassword: 'reset-password/:token',
       // … other screens if you ever deep‑link to them
     },
+  },
+  // Add getInitialURL and subscribe for better deep link handling
+  async getInitialURL() {
+    // Check if app was opened from a deep link
+    const url = await Linking.getInitialURL();
+    return url;
+  },
+  subscribe(listener) {
+    // Listen to incoming links when app is already open
+    const onReceiveURL = ({ url }) => listener(url);
+    
+    // Listen to incoming links from deep linking
+    const subscription = Linking.addEventListener('url', onReceiveURL);
+    
+    return () => {
+      // Clean up the event listeners
+      subscription?.remove();
+    };
   },
 };
 
