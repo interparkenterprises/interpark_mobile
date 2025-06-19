@@ -66,13 +66,15 @@
           "data": [
             {
               "scheme": "https",
-              "host": "interpark-backend.onrender.com"
+              "host": "interpark-backend.onrender.com",
+              "pathPrefix": "/"
             }
           ],
           "category": [
             "DEFAULT",
             "BROWSABLE"
-          ]
+          ],
+          "autoVerify": true
         }
       ]
     },
