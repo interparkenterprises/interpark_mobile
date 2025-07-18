@@ -80,7 +80,7 @@ const ChatRoom = ({ route }) => {
             
             // Show user feedback and provide fallback
             Alert.alert(
-                'Navigation Error', 
+                'Navigation Response', 
                 'Returning to main screen.',
                 [
                     {

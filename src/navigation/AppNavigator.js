@@ -1,4 +1,3 @@
-// src/navigation/AppNavigator.js
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 
@@ -15,6 +14,7 @@ import ChatRooms from '../screens/ChatRooms';
 import Profile from '../screens/Profile';
 import MyList from '../screens/MyList';
 import MapPlace from '../screens/MapPlace';
+import GuestMode from '../screens/GuestMode'; // New import
 
 // Agent-specific screens
 import AddProperty from '../screens/AddProperty';
@@ -25,7 +25,10 @@ const Stack = createStackNavigator();
 
 export default function AppNavigator() {
   return (
-    <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
+    <Stack.Navigator initialRouteName="GuestMode" screenOptions={{ headerShown: false }}>
+      {/* Guest Mode - New initial screen */}
+      <Stack.Screen name="GuestMode" component={GuestMode} />
+      
       {/* Authentication Screens */}
       <Stack.Screen name="Login" component={Login} />
       <Stack.Screen name="Register" component={Register} />
