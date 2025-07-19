@@ -19,6 +19,7 @@ import BouncyCheckbox from 'react-native-bouncy-checkbox';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
+import { useAuth } from '../contexts/AuthContext'; // Import the auth context
 import {
   GOOGLE_WEB_CLIENT_ID,
   BACKEND_URL,
@@ -68,6 +69,9 @@ const cleanRole = (roleString) => {
 };
 
 export default function Register({ navigation }) {
+  // Use the auth context
+  const { login } = useAuth();
+  
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -224,24 +228,23 @@ export default function Register({ navigation }) {
 
       console.log('Google auth response:', response.data);
 
-      if (response.data.token) {
-        // Save auth data
-        await AsyncStorage.setItem('auth_token', response.data.token);
-        await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
-        await AsyncStorage.setItem('userId', response.data.user.id || response.data.user._id);
-
-        // Preload chat rooms
-        try {
-          const roomsRes = await axios.get(
-            `${BACKEND_URL || 'https://interpark-backend.onrender.com'}/api/chat/rooms/${response.data.user.id || response.data.user._id}`,
-            { 
-              headers: { Authorization: `Bearer ${response.data.token}` },
-              timeout: 10000
-            }
-          );
-          await AsyncStorage.setItem('userChatRooms', JSON.stringify(roomsRes.data));
-        } catch (err) {
-          console.warn('Could not preload chat rooms:', err);
+      if (response.data.token && response.data.user) {
+        // Validate that we have the required data before calling login
+        const token = response.data.token;
+        const userData = response.data.user;
+        
+        // Ensure user data has required fields
+        if (!userData.id && !userData._id) {
+          throw new Error('Invalid user data: missing user ID');
+        }
+        
+        console.log('Calling login with token and user data:', { token, userData });
+        
+        // Use the auth context login method - now properly formatted
+        const loginSuccess = await login(token, userData);
+        
+        if (!loginSuccess) {
+          throw new Error('Login failed in AuthContext');
         }
 
         Alert.alert(
@@ -251,16 +254,15 @@ export default function Register({ navigation }) {
             {
               text: 'OK',
               onPress: () => {
-                // Navigate to appropriate dashboard based on user role
-                const dashboardRoute = response.data.user.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard';
-                console.log('Navigating to:', dashboardRoute, 'for user role:', response.data.user.role);
-                navigation.replace(dashboardRoute);
+                // The AuthContext will handle navigation automatically
+                // No manual navigation needed here
+                console.log('Google registration completed successfully');
               }
             }
           ]
         );
       } else {
-        throw new Error('No token received from server');
+        throw new Error('Invalid response: missing token or user data');
       }
     } catch (error) {
       console.error('Google registration error:', error);
@@ -678,16 +680,6 @@ export default function Register({ navigation }) {
           Already have an account? Login
         </Text>
       </TouchableOpacity>
-      
-      {/* Debug info - remove in production */}
-      {/*
-      {__DEV__ && (
-        <View style={styles.debugContainer}>
-          <Text style={styles.debugText}>Debug: Selected Role: {role}</Text>
-          <Text style={styles.debugText}>Debug: Cleaned Role: {cleanRole(role)}</Text>
-          <Text style={styles.debugText}>Terms Checked: {isTermsChecked.toString()}</Text>
-        </View>
-      )}*/}
     </View>
   );
 }
@@ -818,15 +810,5 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
-  },
-  debugContainer: {
-    marginTop: 20,
-    padding: 10,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    borderRadius: 5,
-  },
-  debugText: {
-    fontSize: 12,
-    color: '#333',
   },
 });

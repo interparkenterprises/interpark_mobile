@@ -8,21 +8,22 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
-  BackHandler, // Import BackHandler
+  BackHandler,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons'; // Import Icons
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { EXPO_PUBLIC_API_BASE_URL } from '@env';
-import { Asset } from 'expo-asset'; // Import expo-asset
+import { Asset } from 'expo-asset';
+import { useAuth } from '../contexts/AuthContext'; // Import useAuth
 
 export default function Profile({ navigation }) {
-  const [user, setUser] = useState(null);
   const [avatar, setAvatar] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false); // Track edit mode
-  const [newUsername, setNewUsername] = useState(''); // Store edited username
+  const [loading, setLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+
+  // Use auth context
+  const { user, logout } = useAuth();
 
   const preloadAvatar = async (uri) => {
     try {
@@ -34,33 +35,19 @@ export default function Profile({ navigation }) {
   };
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const storedUser = await AsyncStorage.getItem('user');
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          setUser(parsedUser);
-          setAvatar(parsedUser?.avatar || null);
-          setNewUsername(parsedUser.username); // Pre-fill with existing username
+    if (user) {
+      setAvatar(user?.avatar || null);
+      setNewUsername(user.username);
 
-          // Preload the avatar if it's available
-          if (parsedUser?.avatar) {
-            preloadAvatar(parsedUser.avatar);
-          }
-        } else {
-          console.warn('No user data found in AsyncStorage.');
-        }
-      } catch (error) {
-        console.error('Failed to load user data:', error);
-      } finally {
-        setLoading(false);
+      // Preload the avatar if it's available
+      if (user?.avatar) {
+        preloadAvatar(user.avatar);
       }
-    };
-    fetchUserData();
+    }
 
     const backHandler = BackHandler.addEventListener('hardwareBackPress', handleExit);
-    return () => backHandler.remove(); // Cleanup on unmount
-  }, []);
+    return () => backHandler.remove();
+  }, [user]);
 
   const pickImage = async () => {
     try {
@@ -89,8 +76,6 @@ export default function Profile({ navigation }) {
           } else {
             Alert.alert('Error', 'User ID not found.');
           }
-
-          // Preload the newly selected avatar
           preloadAvatar(uri);
         } else {
           Alert.alert('Error', 'The selected image is invalid or empty.');
@@ -127,11 +112,7 @@ export default function Profile({ navigation }) {
       const data = await response.json();
       if (response.ok) {
         Alert.alert('Success', 'Avatar uploaded successfully!');
-        setUser((prevUser) => ({ ...prevUser, avatar: data.avatar }));
         setAvatar(data.avatar);
-        await AsyncStorage.setItem('user', JSON.stringify({ ...user, avatar: data.avatar }));
-
-        // Preload the uploaded avatar
         preloadAvatar(data.avatar);
       } else {
         throw new Error(data.error || 'Failed to upload avatar.');
@@ -143,43 +124,32 @@ export default function Profile({ navigation }) {
   };
 
   const handleSaveUsername = async () => {
-    setUser((prevUser) => ({ ...prevUser, username: newUsername }));
-    await AsyncStorage.setItem('user', JSON.stringify({ ...user, username: newUsername }));
+    // Note: You might want to add a backend endpoint to update username
+    // For now, this just updates local state
     setIsEditing(false);
+    Alert.alert('Note', 'Username update feature needs backend implementation');
   };
 
   const handleLogout = async () => {
-    try {
-      const token = await AsyncStorage.getItem('auth_token'); // Retrieve the auth token
-  
-      const response = await fetch(`https://interpark-backend.onrender.com/api/auth/logout`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
         },
-      });
-  
-      const data = await response.json();
-  
-      if (response.ok) {
-        // Clear the AsyncStorage after successful logout
-        await AsyncStorage.clear();
-        Alert.alert('Logged Out', data.message);
-        setUser(null);
-        // Reset the navigation stack to the Login screen
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Login' }],
-        });
-         
-      } else {
-        Alert.alert('Logout Failed', data.error || 'An error occurred while logging out.');
-      }
-    } catch (error) {
-      console.error('Logout Error:', error);
-      Alert.alert('Error', 'An error occurred during logout.');
-    }
+        {
+          text: 'Logout',
+          onPress: async () => {
+            setLoading(true);
+            await logout();
+            setLoading(false);
+            // Navigation will be handled automatically by AppNavigator
+          },
+        },
+      ]
+    );
   };
 
   const handleExit = () => {
@@ -191,27 +161,19 @@ export default function Profile({ navigation }) {
         {
           text: "Yes",
           onPress: () => {
-            BackHandler.exitApp(); // Close the app gracefully
+            BackHandler.exitApp();
           },
         },
       ],
       { cancelable: true }
     );
   };
-  
-
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="24" color="#ffffff" />
-      </View>
-    );
-  }
 
   if (!user) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>No user data available.</Text>
+        <ActivityIndicator size="24" color="#ffffff" />
+        <Text style={styles.errorText}>Loading user data...</Text>
       </View>
     );
   }
@@ -244,20 +206,33 @@ export default function Profile({ navigation }) {
         )}
       </View>
       <Text style={styles.info}>Email: {user.email}</Text>
+      
+      
       <TouchableOpacity style={styles.button} onPress={pickImage}>
         <Text style={styles.buttonText}>
           {avatar ? 'Change Avatar' : 'Upload Avatar'}
         </Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.buttonText}>Logout</Text>
+      
+      <TouchableOpacity 
+        style={[styles.logoutButton, loading && styles.disabledButton]} 
+        onPress={handleLogout}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator size="small" color="white" />
+        ) : (
+          <Text style={styles.buttonText}>Logout</Text>
+        )}
       </TouchableOpacity>
+      
       <TouchableOpacity style={styles.exitButton} onPress={handleExit}>
         <Text style={styles.buttonText}>Exit App</Text>
       </TouchableOpacity>
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -323,5 +298,8 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 18,
     color: 'red',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

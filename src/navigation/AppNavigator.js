@@ -1,7 +1,10 @@
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 
-// Import screens for both agents and clients
+import { useAuth } from '../contexts/AuthContext';
+
+// Import screens
 import Login from '../screens/Login';
 import Register from '../screens/Register';
 import ForgotPassword from '../screens/ForgotPassword';
@@ -14,27 +17,39 @@ import ChatRooms from '../screens/ChatRooms';
 import Profile from '../screens/Profile';
 import MyList from '../screens/MyList';
 import MapPlace from '../screens/MapPlace';
-import GuestMode from '../screens/GuestMode'; // New import
-
-// Agent-specific screens
+import GuestMode from '../screens/GuestMode';
 import AddProperty from '../screens/AddProperty';
 import AIProcessingScreen from '../screens/AIProcessingScreen';
 
-// Create the stack navigator
 const Stack = createStackNavigator();
 
-export default function AppNavigator() {
-  return (
-    <Stack.Navigator initialRouteName="GuestMode" screenOptions={{ headerShown: false }}>
-      {/* Guest Mode - New initial screen */}
-      <Stack.Screen name="GuestMode" component={GuestMode} />
-      
-      {/* Authentication Screens */}
-      <Stack.Screen name="Login" component={Login} />
-      <Stack.Screen name="Register" component={Register} />
-      <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
-      <Stack.Screen name="ResetPassword" component={ResetPassword} />
+const LoadingScreen = () => (
+  <View style={styles.loadingContainer}>
+    <ActivityIndicator size="large" color="#005478" />
+  </View>
+);
 
+const AuthStack = () => (
+  <Stack.Navigator 
+    initialRouteName="GuestMode"
+    screenOptions={{ headerShown: false }}
+  >
+    <Stack.Screen name="GuestMode" component={GuestMode} />
+    <Stack.Screen name="Login" component={Login} />
+    <Stack.Screen name="Register" component={Register} />
+    <Stack.Screen name="ForgotPassword" component={ForgotPassword} />
+    <Stack.Screen name="ResetPassword" component={ResetPassword} />
+  </Stack.Navigator>
+);
+
+const AppStack = () => {
+  const { user } = useAuth();
+  
+  return (
+    <Stack.Navigator 
+      initialRouteName={user?.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard'}
+      screenOptions={{ headerShown: false }}
+    >
       {/* Client Navigation Screens */}
       <Stack.Screen name="ClientDashboard" component={ClientDashboard} />
       <Stack.Screen name="PropertiesList" component={PropertiesList} />
@@ -52,4 +67,27 @@ export default function AppNavigator() {
       <Stack.Screen name="MapPlace" component={MapPlace} />
     </Stack.Navigator>
   );
+};
+
+export default function AppNavigator() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  return (
+    <>
+      {isAuthenticated ? <AppStack /> : <AuthStack />}
+    </>
+  );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#B0B0B0',
+  },
+});

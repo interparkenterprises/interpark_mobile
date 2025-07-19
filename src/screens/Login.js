@@ -13,33 +13,30 @@ import {
   Platform,
 } from 'react-native';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import { EXPO_PUBLIC_API_BASE_URL, GOOGLE_WEB_CLIENT_ID, BACKEND_URL } from '@env';
+
+import { useAuth } from '../contexts/AuthContext'; // Import the auth context
 
 WebBrowser.maybeCompleteAuthSession();
 
 // Cross-platform base64 encoding function
 const base64Encode = (str) => {
   try {
-    // For Expo Go and development
     if (typeof btoa !== 'undefined') {
       return btoa(unescape(encodeURIComponent(str)));
     }
     
-    // For React Native production builds
     if (typeof Buffer !== 'undefined') {
       return Buffer.from(str, 'utf8').toString('base64');
     }
     
-    // Fallback manual implementation
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
     let result = '';
     let i = 0;
     
-    // Convert string to UTF-8 bytes
     const utf8Bytes = unescape(encodeURIComponent(str));
     
     while (i < utf8Bytes.length) {
@@ -58,21 +55,16 @@ const base64Encode = (str) => {
     return result;
   } catch (error) {
     console.error('Base64 encoding error:', error);
-    // Simple fallback - just URL encode the string
     return encodeURIComponent(str);
   }
 };
 
-// Helper function to clean role string (same as Register.js)
 const cleanRole = (roleString) => {
   if (!roleString) return null;
   
-  // Remove any trailing characters like #, &, whitespace, etc.
   const cleaned = roleString.trim().replace(/[#&\s]+$/, '');
-  
   console.log('Cleaning role:', roleString, '->', cleaned);
   
-  // Validate the cleaned role
   if (['CLIENT', 'AGENT_LANDLORD'].includes(cleaned)) {
     return cleaned;
   }
@@ -89,6 +81,9 @@ export default function Login({ navigation }) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
 
+  // Use the auth context
+  const { login: authLogin } = useAuth();
+
   // Enhanced deep linking handler
   const handleDeepLink = async (event) => {
     let url;
@@ -104,17 +99,13 @@ export default function Login({ navigation }) {
 
     console.log('Processing deep link:', url);
     
-    // Handle both interpark:// and https:// schemes
     if (url.includes('google-auth') || url.includes('interpark://')) {
       try {
         let params;
         
         if (url.includes('?')) {
-          // Split by ? and get the query part, then split by # to remove any fragments
           const urlParts = url.split('?');
           const queryPart = urlParts[1];
-          
-          // Remove any URL fragments (everything after #)
           const cleanQueryPart = queryPart.split('#')[0];
           
           console.log('Original query part:', queryPart);
@@ -140,7 +131,6 @@ export default function Login({ navigation }) {
         console.log('Extracted role from URL (raw):', roleFromUrl);
         
         if (token) {
-          // Clean the role from URL if present
           const cleanedRoleFromUrl = cleanRole(roleFromUrl);
           console.log('Cleaned role from URL:', cleanedRoleFromUrl);
           
@@ -159,11 +149,9 @@ export default function Login({ navigation }) {
   useEffect(() => {
     let subscription;
 
-    // Set up the linking event listener
     const setupLinking = async () => {
       subscription = Linking.addEventListener('url', handleDeepLink);
 
-      // Check if app was opened via deep link
       try {
         const initialUrl = await Linking.getInitialURL();
         if (initialUrl) {
@@ -194,9 +182,6 @@ export default function Login({ navigation }) {
     try {
       console.log('Sending token to backend...');
       
-      // For login, we don't need to specify a role if the user already exists
-      // The backend will use the existing user's role from the database
-      // Only send role if it's explicitly provided from the URL (for registration flow)
       const requestBody = { idToken };
       if (roleFromUrl) {
         requestBody.role = roleFromUrl;
@@ -218,40 +203,18 @@ export default function Login({ navigation }) {
       console.log('Google auth response:', response.data);
 
       if (response.data.token) {
-        // Save auth data
-        await AsyncStorage.setItem('auth_token', response.data.token);
-        await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
-        await AsyncStorage.setItem('userId', response.data.user.id || response.data.user._id);
-
-        // Preload chat rooms
-        try {
-          const roomsRes = await axios.get(
-            `${BACKEND_URL || 'https://interpark-backend.onrender.com'}/api/chat/rooms/${response.data.user.id || response.data.user._id}`,
-            { 
-              headers: { Authorization: `Bearer ${response.data.token}` },
-              timeout: 10000
-            }
+        // Use the auth context login function
+        const loginSuccess = await authLogin(response.data);
+        
+        if (loginSuccess) {
+          Alert.alert(
+            'Welcome!', 
+            response.data.message || 'Google login successful'
           );
-          await AsyncStorage.setItem('userChatRooms', JSON.stringify(roomsRes.data));
-        } catch (err) {
-          console.warn('Could not preload chat rooms:', err);
+          // Navigation will be handled automatically by AppNavigator
+        } else {
+          throw new Error('Failed to complete login process');
         }
-
-        Alert.alert(
-          'Welcome!', 
-          response.data.message || 'Google login successful',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Navigate to appropriate dashboard based on user role from backend
-                const dashboardRoute = response.data.user.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard';
-                console.log('Navigating to:', dashboardRoute, 'for user role:', response.data.user.role);
-                navigation.replace(dashboardRoute);
-              }
-            }
-          ]
-        );
       } else {
         throw new Error('No token received from server');
       }
@@ -283,19 +246,15 @@ export default function Login({ navigation }) {
     setGoogleLoading(true);
     
     try {
-      // Check if we're in development or production
       const isDev = __DEV__ || Constants.executionEnvironment === 'storeClient';
       
-      // For login, we use a special state to indicate this is a login attempt
-      // We don't specify a role since we want to use whatever role the user already has
       const state = JSON.stringify({ 
-        action: 'login', // Distinguish from registration
+        action: 'login',
         platform: Platform.OS,
         isDev: isDev,
         timestamp: Date.now()
       });
       
-      // Use our cross-platform base64 encoding function
       const encodedState = base64Encode(state);
       
       console.log('State object:', state);
@@ -311,8 +270,6 @@ export default function Login({ navigation }) {
         `prompt=select_account`;
 
       console.log('Opening Google auth URL:', authUrl);
-      console.log('Environment check - __DEV__:', __DEV__, 'Platform:', Platform.OS);
-      console.log('Constants.executionEnvironment:', Constants.executionEnvironment);
       
       await WebBrowser.warmUpAsync();
       
@@ -359,27 +316,15 @@ export default function Login({ navigation }) {
         { timeout: 10000 }
       );
 
-      await AsyncStorage.setItem('auth_token', data.token);
-      await AsyncStorage.setItem('user', JSON.stringify(data.user));
-      await AsyncStorage.setItem('userId', data.user.id || data.user._id);
-
-      // Preload chat rooms
-      try {
-        const roomsRes = await axios.get(
-          `${backendUrl}/api/chat/rooms/${data.user.id || data.user._id}`,
-          { 
-            headers: { Authorization: `Bearer ${data.token}` },
-            timeout: 10000
-          }
-        );
-        await AsyncStorage.setItem('userChatRooms', JSON.stringify(roomsRes.data));
-      } catch (err) {
-        console.warn('Could not preload chat rooms:', err);
+      // Use the auth context login function
+      const loginSuccess = await authLogin(data);
+      
+      if (loginSuccess) {
+        // Navigation will be handled automatically by AppNavigator
+        console.log('Login successful, user authenticated');
+      } else {
+        Alert.alert('Login Failed', 'Failed to complete login process');
       }
-
-      navigation.replace(
-        data.user.role === 'CLIENT' ? 'ClientDashboard' : 'AgentDashboard'
-      );
     } catch (err) {
       console.error(err);
       Alert.alert('Login Failed', err.response?.data?.error || err.message);
@@ -436,15 +381,11 @@ export default function Login({ navigation }) {
           autoComplete="password"
           textContentType="password"
           passwordRules="minlength: 6;"
-          // Force re-render to fix visibility issues
           key={`password-${isPasswordVisible}`}
-          // Additional props to ensure proper behavior
           enablesReturnKeyAutomatically={true}
           returnKeyType="done"
           clearButtonMode="never"
-          // Ensure proper text rendering
           allowFontScaling={true}
-          // Fix for Android APK builds
           underlineColorAndroid="transparent"
         />
         <TouchableOpacity
@@ -512,18 +453,11 @@ export default function Login({ navigation }) {
       >
         <Text style={styles.registerText}>Don't have an account? Register</Text>
       </TouchableOpacity>
-      
-      {/* Debug info - remove in production */}
-      {/*  
-      {__DEV__ && (
-        <View style={styles.debugContainer}>
-          <Text style={styles.debugText}>Debug: Login Mode</Text>
-        </View>
-      )}*/}
     </View>
   );
 }
 
+// Keep all your existing styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -554,7 +488,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     fontSize: 16,
     color: '#000',
-    // Ensure proper text rendering on Android
     textAlignVertical: 'center',
   },
   passwordContainer: {
@@ -577,11 +510,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#000',
     backgroundColor: 'transparent',
-    // Remove default styling that might interfere
     borderWidth: 0,
-    // Ensure proper text rendering on Android
     textAlignVertical: 'center',
-    // Fix for secure text entry visibility
     fontFamily: Platform.OS === 'android' ? 'monospace' : 'System',
   },
   eyeIcon: {
@@ -659,15 +589,5 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
-  },
-  debugContainer: {
-    marginTop: 20,
-    padding: 10,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    borderRadius: 5,
-  },
-  debugText: {
-    fontSize: 12,
-    color: '#333',
   },
 });

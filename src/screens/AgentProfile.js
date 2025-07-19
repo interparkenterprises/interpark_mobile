@@ -17,11 +17,11 @@ import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import { Asset } from 'expo-asset';
+import { useAuth } from '../contexts/AuthContext'; // Import useAuth
 
 export default function AgentProfile() {
-  const [user, setUser] = useState(null);
   const [avatar, setAvatar] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -32,6 +32,9 @@ export default function AgentProfile() {
   const [fieldsLocked, setFieldsLocked] = useState(false);
 
   const navigation = useNavigation();
+
+  // Use auth context
+  const { user, logout } = useAuth();
 
   // Preload Avatar function
   const preloadAvatar = async (uri) => {
@@ -44,35 +47,20 @@ export default function AgentProfile() {
   };
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const storedUser = await AsyncStorage.getItem('user');
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          setUser(parsedUser);
-          setAvatar(parsedUser.avatar || null);
-          setNewUsername(parsedUser.username || '');
+    if (user) {
+      setAvatar(user.avatar || null);
+      setNewUsername(user.username || '');
 
-          if (parsedUser.avatar) {
-            preloadAvatar(parsedUser.avatar);
-          }
-
-          await fetchAgentProfile(parsedUser.id);
-        } else {
-          console.warn('No user data found in AsyncStorage.');
-        }
-      } catch (error) {
-        console.error('Failed to load user data:', error);
-      } finally {
-        setLoading(false);
+      if (user.avatar) {
+        preloadAvatar(user.avatar);
       }
-    };
 
-    fetchUserData();
+      fetchAgentProfile(user.id);
+    }
 
     const backHandler = BackHandler.addEventListener('hardwareBackPress', handleExit);
     return () => backHandler.remove();
-  }, []);
+  }, [user]);
 
   // Fetch Agent Profile info
   const fetchAgentProfile = async (userId) => {
@@ -169,9 +157,7 @@ export default function AgentProfile() {
       const data = await response.json();
       if (response.ok) {
         Alert.alert('Success', 'Avatar uploaded successfully!');
-        setUser((prev) => ({ ...prev, avatar: data.avatar }));
         setAvatar(data.avatar);
-        await AsyncStorage.setItem('user', JSON.stringify({ ...user, avatar: data.avatar }));
         preloadAvatar(data.avatar);
       } else {
         throw new Error(data.error || 'Failed to upload avatar.');
@@ -221,14 +207,7 @@ export default function AgentProfile() {
       const data = await response.json();
       if (response.ok) {
         Alert.alert('Success', 'Profile updated successfully!');
-        setUser({ ...user, phoneNumber, nationalIdOrPassport, agentNumber });
-        await AsyncStorage.setItem(
-          'user',
-          JSON.stringify({ ...user, phoneNumber, nationalIdOrPassport, agentNumber })
-        );
         setIsEditing(false);
-
-        // _Lock_ both ID and agent fields from now on
         setFieldsLocked(true);
       } else {
         throw new Error(data.error || 'Failed to update profile.');
@@ -242,27 +221,25 @@ export default function AgentProfile() {
   };
 
   const handleLogout = async () => {
-    try {
-      const token = await AsyncStorage.getItem('auth_token');
-      const response = await fetch(`https://interpark-backend.onrender.com/api/auth/logout`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
         },
-      });
-      const data = await response.json();
-      if (response.ok) {
-        await AsyncStorage.clear();
-        Alert.alert('Logged Out', data.message);
-        navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
-      } else {
-        Alert.alert('Logout Failed', data.error || 'An error occurred while logging out.');
-      }
-    } catch (error) {
-      console.error('Logout Error:', error);
-      Alert.alert('Error', 'An error occurred during logout.');
-    }
+        {
+          text: 'Logout',
+          onPress: async () => {
+            setLoading(true);
+            await logout();
+            setLoading(false);
+            // Navigation will be handled automatically by AppNavigator
+          },
+        },
+      ]
+    );
   };
 
   const handleExit = () => {
@@ -280,18 +257,11 @@ export default function AgentProfile() {
     );
   };
 
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="24" color="#ffffff" />
-      </View>
-    );
-  }
-
   if (!user) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>No user data available.</Text>
+        <ActivityIndicator size="24" color="#ffffff" />
+        <Text style={styles.errorText}>Loading user data...</Text>
       </View>
     );
   }
@@ -393,15 +363,25 @@ export default function AgentProfile() {
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.buttonText}>Logout</Text>
+      <TouchableOpacity 
+        style={[styles.logoutButton, loading && styles.disabledButton]} 
+        onPress={handleLogout}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator size="small" color="white" />
+        ) : (
+          <Text style={styles.buttonText}>Logout</Text>
+        )}
       </TouchableOpacity>
+      
       <TouchableOpacity onPress={handleExit} style={styles.exitButton}>
         <Text style={styles.buttonText}>Exit App</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -516,5 +496,8 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 18,
     color: 'red',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

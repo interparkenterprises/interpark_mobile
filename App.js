@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AppNavigator from './src/navigation/AppNavigator';
 import { NavigationContainer } from '@react-navigation/native';
 import { Linking } from 'react-native';
+import { AuthProvider } from './src/contexts/AuthContext'; // Add this import
 
 const linking = {
   // Recognize both your app's scheme and your backend's https:// URL
@@ -43,10 +44,12 @@ const linking = {
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer linking={linking} fallback={null}>
-        <AppNavigator />
-      </NavigationContainer>
-    </GestureHandlerRootView>
+    <AuthProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <NavigationContainer linking={linking} fallback={null}>
+          <AppNavigator />
+        </NavigationContainer>
+      </GestureHandlerRootView>
+    </AuthProvider>
   );
 }
