@@ -205,7 +205,7 @@ const ChatRoom = ({ route }) => {
                         });
                         console.log('Push token registered successfully');
                     } catch (error) {
-                        console.error('Error registering push token:', error);
+                        //console.error('Error registering push token:', error);
                     }
                 }
             } catch (error) {
