@@ -11,7 +11,8 @@ import {
     Image,
     Animated,
     Linking,
-    BackHandler
+    BackHandler,
+    AppState
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -19,6 +20,16 @@ import axios from 'axios';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { EXPO_PUBLIC_API_BASE_URL } from '@env';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Configure notifications
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+    }),
+});
 
 const ChatRoom = ({ route }) => {
     const navigation = useNavigation();
@@ -27,26 +38,189 @@ const ChatRoom = ({ route }) => {
     const [profileInfo, setProfileInfo] = useState(null);
     const [isProfileVisible, setIsProfileVisible] = useState(false);
     const [showBackButton, setShowBackButton] = useState(false);
+    const [isTyping, setIsTyping] = useState(false);
+    const [inputText, setInputText] = useState(''); // Add input text state
     const animation = useState(new Animated.Value(0))[0];
     const visitCountRef = useRef(0);
     const socketRef = useRef(null);
+    const messageIdsRef = useRef(new Set());
+    const typingTimeoutRef = useRef(null);
+    const reconnectTimeoutRef = useRef(null);
+    const appState = useRef(AppState.currentState);
 
-    // Initialize socket connection
+    const currentUserId = userType === 'agent' ? agentLandlordId : clientId;
+
+    // Initialize socket connection with better error handling
+    const initializeSocket = useCallback(() => {
+        if (socketRef.current?.connected) return;
+
+        socketRef.current = io('https://interpark-backend.onrender.com', {
+            transports: ['websocket', 'polling'],
+            timeout: 5000,
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+        });
+
+        socketRef.current.on('connect', () => {
+            console.log('Socket connected:', socketRef.current.id);
+            
+            // Register user and join room
+            socketRef.current.emit('register_user', currentUserId);
+            if (chatRoomId) {
+                socketRef.current.emit('join_room', chatRoomId);
+            }
+        });
+
+        socketRef.current.on('connect_error', (error) => {
+            console.error('Socket connection error:', error);
+        });
+
+        socketRef.current.on('disconnect', (reason) => {
+            console.log('Socket disconnected:', reason);
+            
+            // Attempt to reconnect after a delay
+            if (reason === 'io server disconnect') {
+                reconnectTimeoutRef.current = setTimeout(() => {
+                    initializeSocket();
+                }, 2000);
+            }
+        });
+
+        socketRef.current.on('receive_message', (incomingMessage) => {
+            console.log('Received message:', incomingMessage);
+            
+            // Prevent duplicate messages
+            if (messageIdsRef.current.has(incomingMessage.id)) {
+                console.log('Duplicate message ignored:', incomingMessage.id);
+                return;
+            }
+
+            messageIdsRef.current.add(incomingMessage.id);
+
+            const newMessage = {
+                _id: incomingMessage.id,
+                text: incomingMessage.content,
+                createdAt: new Date(incomingMessage.timestamp),
+                user: { _id: incomingMessage.senderId },
+            };
+            
+            setMessages(prevMessages => {
+                // Double-check for duplicates in the current message list
+                const exists = prevMessages.some(msg => msg._id === incomingMessage.id);
+                if (exists) {
+                    console.log('Message already exists in state:', incomingMessage.id);
+                    return prevMessages;
+                }
+                
+                return GiftedChat.prepend(prevMessages, newMessage);
+            });
+        });
+
+        socketRef.current.on('user_typing', (data) => {
+            if (data.userId !== currentUserId) {
+                setIsTyping(true);
+            }
+        });
+
+        socketRef.current.on('user_stop_typing', (data) => {
+            if (data.userId !== currentUserId) {
+                setIsTyping(false);
+            }
+        });
+
+        socketRef.current.on('message_error', (error) => {
+            console.error('Message error:', error);
+            Alert.alert('Error', 'Failed to send message. Please try again.');
+        });
+
+    }, [currentUserId, chatRoomId]);
+
+    // Handle app state changes
     useEffect(() => {
-        socketRef.current = io('https://interpark-backend.onrender.com');
+        const handleAppStateChange = (nextAppState) => {
+            if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+                // App came to foreground - reconnect socket if needed
+                if (!socketRef.current?.connected) {
+                    initializeSocket();
+                }
+            }
+            appState.current = nextAppState;
+        };
+
+        const subscription = AppState.addEventListener('change', handleAppStateChange);
+        return () => subscription?.remove();
+    }, [initializeSocket]);
+
+    // Initialize socket on component mount
+    useEffect(() => {
+        initializeSocket();
+        
         return () => {
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+            }
             if (socketRef.current) {
                 socketRef.current.disconnect();
+                socketRef.current = null;
             }
         };
-    }, []);
+    }, [initializeSocket]);
+
+    // Register for push notifications
+    useEffect(() => {
+        const registerForPushNotifications = async () => {
+            try {
+                if (Platform.OS === 'android') {
+                    await Notifications.setNotificationChannelAsync('chat-messages', {
+                        name: 'Chat Messages',
+                        importance: Notifications.AndroidImportance.HIGH,
+                        vibrationPattern: [0, 250, 250, 250],
+                        lightColor: '#FF231F7C',
+                    });
+                }
+
+                if (Device.isDevice) {
+                    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+                    let finalStatus = existingStatus;
+                    
+                    if (existingStatus !== 'granted') {
+                        const { status } = await Notifications.requestPermissionsAsync();
+                        finalStatus = status;
+                    }
+                    
+                    if (finalStatus !== 'granted') {
+                        console.log('Failed to get push token for push notification!');
+                        return;
+                    }
+                    
+                    const token = (await Notifications.getExpoPushTokenAsync()).data;
+                    console.log('Push token:', token);
+                    
+                    // Register token with backend
+                    try {
+                        await axios.post('https://interpark-backend.onrender.com/api/notifications/register', {
+                            userId: currentUserId,
+                            token: token
+                        });
+                        console.log('Push token registered successfully');
+                    } catch (error) {
+                        console.error('Error registering push token:', error);
+                    }
+                }
+            } catch (error) {
+                console.error('Error setting up push notifications:', error);
+            }
+        };
+
+        registerForPushNotifications();
+    }, [currentUserId]);
 
     // Track page visits to show/hide back button
     useFocusEffect(
         useCallback(() => {
             visitCountRef.current += 1;
             
-            // Show back button only from second visit onwards
             if (visitCountRef.current > 1) {
                 setShowBackButton(true);
             }
@@ -60,46 +234,36 @@ const ChatRoom = ({ route }) => {
     // Safe navigation handler
     const handleBackPress = useCallback(() => {
         try {
-            //console.log('Back button pressed');
-            //console.log('Can go back:', navigation.canGoBack());
-            
             // Disconnect socket before navigation
             if (socketRef.current) {
                 socketRef.current.disconnect();
+                socketRef.current = null;
             }
             
-            // Check if we can go back safely
             if (navigation.canGoBack()) {
                 navigation.goBack();
             } else {
-                // If we can't go back, navigate to a specific safe screen
                 navigation.navigate('PropertiesList');
             }
         } catch (error) {
             console.error('Navigation error:', error);
-            
-            // Show user feedback and provide fallback
             Alert.alert(
                 'Navigation Response', 
                 'Returning to main screen.',
-                [
-                    {
-                        text: 'OK',
-                        onPress: () => {
-                            try {
-                                // Reset navigation stack as fallback
-                                navigation.reset({
-                                    index: 0,
-                                    routes: [{ name: 'PropertiesList' }],
-                                });
-                            } catch (resetError) {
-                                console.error('Reset navigation error:', resetError);
-                                // Ultimate fallback - close the app gracefully
-                                BackHandler.exitApp();
-                            }
+                [{
+                    text: 'OK',
+                    onPress: () => {
+                        try {
+                            navigation.reset({
+                                index: 0,
+                                routes: [{ name: 'PropertiesList' }],
+                            });
+                        } catch (resetError) {
+                            console.error('Reset navigation error:', resetError);
+                            BackHandler.exitApp();
                         }
                     }
-                ]
+                }]
             );
         }
     }, [navigation]);
@@ -110,39 +274,12 @@ const ChatRoom = ({ route }) => {
             if (showBackButton) {
                 handleBackPress();
             }
-            return true; // Prevent default behavior
+            return true;
         };
 
         const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-
-        return () => {
-            backHandler.remove();
-        };
+        return () => backHandler.remove();
     }, [handleBackPress, showBackButton]);
-
-    useEffect(() => {
-        const requestPermissions = async () => {
-            if (Platform.OS === 'ios' || (Platform.OS === 'android' && Device.osBuildNumber >= 33)) {
-                await Notifications.requestPermissionsAsync();
-            }
-        };
-
-        requestPermissions();
-    }, []);
-
-    const showNotification = async (title, message) => {
-        try {
-            await Notifications.scheduleNotificationAsync({
-                content: {
-                    title: title,
-                    body: message,
-                },
-                trigger: null,
-            });
-        } catch (error) {
-            console.error('Notification error:', error);
-        }
-    };
 
     const handlePhoneCall = (phoneNumber) => {
         if (!phoneNumber) {
@@ -166,6 +303,7 @@ const ChatRoom = ({ route }) => {
             });
     };
 
+    // Fetch messages and profile data
     useEffect(() => {
         if (!chatRoomId) {
             Alert.alert('Info', 'No Conversations have been initiated yet.');
@@ -175,12 +313,15 @@ const ChatRoom = ({ route }) => {
         const fetchMessages = async () => {
             try {
                 const response = await axios.get(`https://interpark-backend.onrender.com/api/chat/${chatRoomId}/messages`);
-                const formattedMessages = response.data.map((msg) => ({
-                    _id: msg.id,
-                    text: msg.content,
-                    createdAt: new Date(msg.timestamp),
-                    user: { _id: msg.senderId },
-                }));
+                const formattedMessages = response.data.map((msg) => {
+                    messageIdsRef.current.add(msg.id); // Track message IDs
+                    return {
+                        _id: msg.id,
+                        text: msg.content,
+                        createdAt: new Date(msg.timestamp),
+                        user: { _id: msg.senderId },
+                    };
+                });
                 setMessages(formattedMessages);
             } catch (error) {
                 console.error('Error fetching messages:', error);
@@ -212,120 +353,98 @@ const ChatRoom = ({ route }) => {
 
         fetchMessages();
         fetchProfileData();
-
-        // Join socket room
-        if (socketRef.current) {
-            socketRef.current.emit('join_room', chatRoomId);
-
-            socketRef.current.on('receive_message', (incomingMessage) => {
-                const currentUserId = userType === 'agent' ? agentLandlordId : clientId;
-                
-                // Only show messages from other users (not our own messages)
-                if (incomingMessage.senderId !== currentUserId) {
-                    console.log('Received message from database:', incomingMessage);
-                    
-                    const newMessage = {
-                        _id: incomingMessage.id,
-                        text: incomingMessage.content,
-                        createdAt: new Date(incomingMessage.timestamp),
-                        user: { _id: incomingMessage.senderId },
-                    };
-                    
-                    setMessages(prevMessages => {
-                        // Check if message already exists to prevent duplicates
-                        const messageExists = prevMessages.some(msg => 
-                            msg._id === incomingMessage.id || 
-                            (msg.text === incomingMessage.content && 
-                             msg.user._id === incomingMessage.senderId &&
-                             Math.abs(new Date(msg.createdAt) - new Date(incomingMessage.timestamp)) < 1000)
-                        );
-                        
-                        if (messageExists) {
-                            console.log('Duplicate message detected, ignoring:', incomingMessage);
-                            return prevMessages;
-                        }
-                        
-                        return GiftedChat.prepend(prevMessages, newMessage);
-                    });
-                    
-                    // Show notification for messages from others
-                    showNotification('New Message', incomingMessage.content);
-                } else {
-                    // This is our own message coming back from database - just log it
-                    console.log('Own message saved to database:', incomingMessage);
-                }
-            });
-        }
-
-        // Cleanup function
-        return () => {
-            if (socketRef.current) {
-                socketRef.current.off('receive_message');
-            }
-        };
     }, [chatRoomId, userType, agentLandlordId, clientId]);
 
-    const onSend = async (newMessages = []) => {
+    // Handle typing indicators - Updated to only handle typing notifications
+    const handleTypingIndicator = useCallback((text) => {
+        if (!socketRef.current?.connected) return;
+
+        if (text.length > 0) {
+            socketRef.current.emit('typing_start', {
+                userId: currentUserId,
+                chatRoomId: chatRoomId
+            });
+
+            // Clear existing timeout and set new one
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            }
+
+            typingTimeoutRef.current = setTimeout(() => {
+                socketRef.current.emit('typing_stop', {
+                    userId: currentUserId,
+                    chatRoomId: chatRoomId
+                });
+            }, 1000);
+        } else {
+            socketRef.current.emit('typing_stop', {
+                userId: currentUserId,
+                chatRoomId: chatRoomId
+            });
+        }
+    }, [currentUserId, chatRoomId]);
+
+    // Handle input text changes
+    const handleInputTextChanged = useCallback((text) => {
+        setInputText(text);
+        handleTypingIndicator(text);
+    }, [handleTypingIndicator]);
+
+    const onSend = useCallback(async (newMessages = []) => {
         const message = newMessages[0];
-        const currentUserId = userType === 'agent' ? agentLandlordId : clientId;
         
+        // Clear the input text
+        setInputText('');
+        
+        // Generate unique temporary ID
+        const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        const instantMessage = {
+            ...message,
+            _id: tempId,
+            user: { _id: currentUserId },
+            pending: true
+        };
+        
+        // Show message immediately in UI
+        setMessages((prevMessages) => GiftedChat.prepend(prevMessages, instantMessage));
+
         const fullMessage = {
             chatRoomId: chatRoomId,
             senderId: currentUserId,
             content: message.text,
         };
 
-        // Show message immediately in UI (instant feedback)
-        const instantMessage = {
-            ...message,
-            _id: `instant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            user: { _id: currentUserId }
-        };
-        
-        setMessages((prevMessages) => GiftedChat.prepend(prevMessages, instantMessage));
-
         try {
-            // Send to server in background (don't wait for response to show message)
-            axios.post(`https://interpark-backend.onrender.com/api/chat/send`, fullMessage)
-                .then(response => {
-                    console.log('Message saved to database:', response.data);
-                    
-                    // Update the instant message with the real database ID
-                    setMessages(prevMessages => {
-                        return prevMessages.map(msg => {
-                            if (msg._id === instantMessage._id) {
-                                return {
-                                    ...msg,
-                                    _id: response.data.id,
-                                };
-                            }
-                            return msg;
-                        });
-                    });
-                })
-                .catch(error => {
-                    console.error('Error saving message to database:', error);
-                    // Mark message as failed
-                    setMessages(prevMessages => prevMessages.map(msg => 
-                        msg._id === instantMessage._id ? {...msg, isFailed: true} : msg
-                    ));
-                    Alert.alert('Error', 'Failed to send message.');
-                });
-            
-            // Emit via socket for real-time delivery to other users
-            if (socketRef.current) {
+            // Send via socket for real-time delivery
+            if (socketRef.current?.connected) {
                 socketRef.current.emit('send_message', fullMessage);
+            } else {
+                throw new Error('Socket not connected');
             }
-            
+
+            // Remove the temporary message after successful send
+            setTimeout(() => {
+                setMessages(prevMessages => 
+                    prevMessages.filter(msg => msg._id !== tempId)
+                );
+            }, 1000);
+
         } catch (error) {
             console.error('Error sending message:', error);
+            
             // Mark message as failed
-            setMessages(prevMessages => prevMessages.map(msg => 
-                msg._id === instantMessage._id ? {...msg, isFailed: true} : msg
-            ));
-            Alert.alert('Error', 'Failed to send message.');
+            setMessages(prevMessages => 
+                prevMessages.map(msg => 
+                    msg._id === tempId 
+                        ? { ...msg, pending: false, failed: true }
+                        : msg
+                )
+            );
+            
+            Alert.alert('Error', 'Failed to send message. Please check your connection.');
         }
-    };
+    }, [currentUserId, chatRoomId]);
 
     const toggleProfileVisibility = () => {
         Animated.timing(animation, {
@@ -342,19 +461,26 @@ const ChatRoom = ({ route }) => {
     });
 
     const isAgent = userType === 'agent';
-    const currentUserId = isAgent ? agentLandlordId : clientId;
 
     const renderMessage = (props) => {
         const isSentByCurrentUser = props.currentMessage.user._id === currentUserId;
-        const isFailed = props.currentMessage.isFailed;
+        const isFailed = props.currentMessage.failed;
+        const isPending = props.currentMessage.pending;
         
         return (
             <View style={[
                 isSentByCurrentUser ? styles.sentMessage : styles.receivedMessage,
-                isFailed && styles.failedMessage
+                isFailed && styles.failedMessage,
+                isPending && styles.pendingMessage
             ]}>
-                <Text style={styles.messageText}>{props.currentMessage.text}</Text>
+                <Text style={[
+                    styles.messageText,
+                    isSentByCurrentUser && styles.sentMessageText
+                ]}>
+                    {props.currentMessage.text}
+                </Text>
                 {isFailed && <Text style={styles.failedText}>Failed to send</Text>}
+                {isPending && <Text style={styles.pendingText}>Sending...</Text>}
                 <Text style={styles.timestampText}>
                     {new Date(props.currentMessage.createdAt).toLocaleTimeString([], {
                         hour: '2-digit',
@@ -379,6 +505,8 @@ const ChatRoom = ({ route }) => {
             textInputStyle={styles.composer}
             placeholderTextColor={styles.placeholderText.color}
             multiline={true}
+            text={inputText}
+            onTextChanged={handleInputTextChanged}
         />
     );
     
@@ -389,6 +517,18 @@ const ChatRoom = ({ route }) => {
             </View>
         </Send>
     );
+
+    // Render typing indicator
+    const renderFooter = () => {
+        if (isTyping) {
+            return (
+                <View style={styles.typingContainer}>
+                    <Text style={styles.typingText}>Typing...</Text>
+                </View>
+            );
+        }
+        return null;
+    };
 
     // Early return for no chat room
     if (!chatRoomId) {
@@ -421,7 +561,6 @@ const ChatRoom = ({ route }) => {
                         </Text>
                     </TouchableOpacity>
                     
-                    {/* Show call icon only for clients (when chatting with agent) and when profile info is available */}
                     {!isAgent && profileInfo?.phoneNumber && (
                         <TouchableOpacity 
                             onPress={() => handlePhoneCall(profileInfo.phoneNumber)}
@@ -473,6 +612,7 @@ const ChatRoom = ({ route }) => {
                     )}
                 </Animated.View>
             </View>
+            
             <GiftedChat
                 messages={messages}
                 onSend={onSend}
@@ -483,14 +623,19 @@ const ChatRoom = ({ route }) => {
                 renderInputToolbar={renderInputToolbar}
                 renderSend={renderSend}
                 renderComposer={renderComposer}
+                renderFooter={renderFooter}
                 placeholder="Type a message..."
                 alwaysShowSend={true}
+                text={inputText}
+                onInputTextChanged={handleInputTextChanged}
                 textInputProps={{
                     maxLength: 1000,
                     enablesReturnKeyAutomatically: true,
                     blurOnSubmit: false,
                     returnKeyType: 'default',
                 }}
+                keyboardShouldPersistTaps="never"
+                bottomOffset={Platform.OS === 'ios' ? 0 : 0}
             />
         </View>
     );
@@ -566,11 +711,25 @@ const styles = StyleSheet.create({
         borderColor: '#ff0000',
         borderWidth: 1,
     },
+    pendingMessage: {
+        backgroundColor: '#e6f3ff',
+        borderColor: '#005478',
+        borderWidth: 1,
+        opacity: 0.7,
+    },
     messageText: {
         color: 'black',
     },
+    sentMessageText: {
+        color: 'white',
+    },
     failedText: {
         color: '#ff0000',
+        fontSize: 12,
+        fontStyle: 'italic',
+    },
+    pendingText: {
+        color: '#005478',
         fontSize: 12,
         fontStyle: 'italic',
     },
@@ -635,6 +794,16 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 5,
+    },
+    typingContainer: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        backgroundColor: '#f0f0f0',
+    },
+    typingText: {
+        fontStyle: 'italic',
+        color: '#666',
+        fontSize: 12,
     },
 });
 
