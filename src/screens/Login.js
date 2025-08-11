@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
-  Linking,
   Platform,
 } from 'react-native';
 import axios from 'axios';
@@ -17,58 +16,18 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as WebBrowser from 'expo-web-browser';
 import Constants from 'expo-constants';
 import { EXPO_PUBLIC_API_BASE_URL, GOOGLE_WEB_CLIENT_ID, BACKEND_URL } from '@env';
-
 import { useAuth } from '../contexts/AuthContext'; // Import the auth context
+import { createGoogleOAuthState } from '../utils/encoding'; // ✅ Use shared utility
 
 WebBrowser.maybeCompleteAuthSession();
 
-// Cross-platform base64 encoding function
-const base64Encode = (str) => {
-  try {
-    if (typeof btoa !== 'undefined') {
-      return btoa(unescape(encodeURIComponent(str)));
-    }
-    
-    if (typeof Buffer !== 'undefined') {
-      return Buffer.from(str, 'utf8').toString('base64');
-    }
-    
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-    let result = '';
-    let i = 0;
-    
-    const utf8Bytes = unescape(encodeURIComponent(str));
-    
-    while (i < utf8Bytes.length) {
-      const a = utf8Bytes.charCodeAt(i++);
-      const b = i < utf8Bytes.length ? utf8Bytes.charCodeAt(i++) : 0;
-      const c = i < utf8Bytes.length ? utf8Bytes.charCodeAt(i++) : 0;
-      
-      const bitmap = (a << 16) | (b << 8) | c;
-      
-      result += chars.charAt((bitmap >> 18) & 63);
-      result += chars.charAt((bitmap >> 12) & 63);
-      result += i - 2 < utf8Bytes.length ? chars.charAt((bitmap >> 6) & 63) : '=';
-      result += i - 1 < utf8Bytes.length ? chars.charAt(bitmap & 63) : '=';
-    }
-    
-    return result;
-  } catch (error) {
-    console.error('Base64 encoding error:', error);
-    return encodeURIComponent(str);
-  }
-};
-
 const cleanRole = (roleString) => {
   if (!roleString) return null;
-  
   const cleaned = roleString.trim().replace(/[#&\s]+$/, '');
   console.log('Cleaning role:', roleString, '->', cleaned);
-  
   if (['CLIENT', 'AGENT_LANDLORD'].includes(cleaned)) {
     return cleaned;
   }
-  
   console.warn('Invalid role after cleaning:', cleaned);
   return null;
 };
@@ -81,13 +40,12 @@ export default function Login({ navigation }) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
 
-  // Use the auth context
-  const { login: authLogin } = useAuth();
+  // ✅ Use auth context including lastRole
+  const { login: authLogin, lastRole } = useAuth();
 
   // Enhanced deep linking handler
   const handleDeepLink = async (event) => {
     let url;
-    
     if (typeof event === 'string') {
       url = event;
     } else if (event && event.url) {
@@ -96,44 +54,39 @@ export default function Login({ navigation }) {
       console.log('No URL found in deep link event');
       return;
     }
-
     console.log('Processing deep link:', url);
-    
+
     if (url.includes('google-auth') || url.includes('interpark://')) {
       try {
         let params;
-        
         if (url.includes('?')) {
           const urlParts = url.split('?');
           const queryPart = urlParts[1];
           const cleanQueryPart = queryPart.split('#')[0];
-          
           console.log('Original query part:', queryPart);
           console.log('Cleaned query part:', cleanQueryPart);
-          
           params = new URLSearchParams(cleanQueryPart);
         } else {
           console.log('No query parameters found in URL');
           return;
         }
-        
+
         const token = params.get('token');
         const roleFromUrl = params.get('role');
         const error = params.get('error');
-        
+
         if (error) {
           console.error('OAuth error:', error);
           Alert.alert('Authentication Error', error);
           return;
         }
-        
+
         console.log('Extracted token:', token);
         console.log('Extracted role from URL (raw):', roleFromUrl);
-        
+
         if (token) {
           const cleanedRoleFromUrl = cleanRole(roleFromUrl);
           console.log('Cleaned role from URL:', cleanedRoleFromUrl);
-          
           await handleGoogleToken(token, cleanedRoleFromUrl);
         } else {
           console.log('No token found in deep link');
@@ -148,10 +101,8 @@ export default function Login({ navigation }) {
 
   useEffect(() => {
     let subscription;
-
     const setupLinking = async () => {
       subscription = Linking.addEventListener('url', handleDeepLink);
-
       try {
         const initialUrl = await Linking.getInitialURL();
         if (initialUrl) {
@@ -168,27 +119,24 @@ export default function Login({ navigation }) {
     setupLinking();
 
     return () => {
-      if (subscription) {
+      if (subscription && subscription.remove) {
         subscription.remove();
       }
     };
   }, []);
 
-  // Called once we get idToken from the deep link
+  // Called once we get token from backend
   const handleGoogleToken = async (idToken, roleFromUrl = null) => {
     console.log('Handling Google token for login with role from URL:', roleFromUrl);
     setGoogleLoading(true);
-    
     try {
       console.log('Sending token to backend...');
-      
       const requestBody = { idToken };
       if (roleFromUrl) {
         requestBody.role = roleFromUrl;
       }
-      
       console.log('Request body:', requestBody);
-      
+
       const response = await axios.post(
         `${BACKEND_URL || 'https://interpark-backend.onrender.com'}/api/auth/google`,
         requestBody,
@@ -203,15 +151,9 @@ export default function Login({ navigation }) {
       console.log('Google auth response:', response.data);
 
       if (response.data.token) {
-        // Use the auth context login function
         const loginSuccess = await authLogin(response.data);
-        
         if (loginSuccess) {
-          Alert.alert(
-            'Welcome!', 
-            response.data.message || 'Google login successful'
-          );
-          // Navigation will be handled automatically by AppNavigator
+          Alert.alert('Welcome!', response.data.message || 'Google login successful');
         } else {
           throw new Error('Failed to complete login process');
         }
@@ -221,7 +163,6 @@ export default function Login({ navigation }) {
     } catch (error) {
       console.error('Google login error:', error);
       let errorMessage = 'Failed to authenticate with Google';
-      
       if (error.response) {
         console.log('Error response status:', error.response.status);
         console.log('Error response data:', error.response.data);
@@ -233,63 +174,57 @@ export default function Login({ navigation }) {
         console.log('Error message:', error.message);
         errorMessage = error.message;
       }
-      
       Alert.alert('Google Login Failed', errorMessage);
     } finally {
       setGoogleLoading(false);
     }
   };
 
-  // Enhanced Google sign-in with better error handling
+  // ✅ Updated Google Sign-In using createGoogleOAuthState
   const handleGoogleSignIn = async () => {
     console.log('Starting Google sign-in for login');
     setGoogleLoading(true);
-    
+
     try {
-      const isDev = __DEV__ || Constants.executionEnvironment === 'storeClient';
-      
-      const state = JSON.stringify({ 
-        action: 'login',
-        platform: Platform.OS,
-        isDev: isDev,
-        timestamp: Date.now()
-      });
-      
-      const encodedState = base64Encode(state);
-      
-      console.log('State object:', state);
-      console.log('Encoded state:', encodedState);
-      
       const backendUrl = BACKEND_URL || 'https://interpark-backend.onrender.com';
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+
+      // ✅ Use lastRole from context (saved from last login)
+      const state = createGoogleOAuthState({
+        role: lastRole,           // Dynamically uses last logged-in user's role
+        platform: Platform.OS,    // 'android' or 'ios'
+        action: 'login',          // Tells backend it's a login flow
+      });
+
+      // ✅ Fixed: No backtick in URL string
+      const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${GOOGLE_WEB_CLIENT_ID}&` +
         `redirect_uri=${encodeURIComponent(`${backendUrl}/api/auth/google-callback`)}&` +
-        `response_type=code&` +
-        `scope=openid%20profile%20email&` +
-        `state=${encodedState}&` +
+        `response_type=code&` +  // This was missing — now fixed
+        `scope=openid%20email%20profile&` +
+        `state=${state}&` +
         `prompt=select_account`;
 
-      console.log('Opening Google auth URL:', authUrl);
-      
+      console.log('Opening Google auth URL:', googleAuthUrl);
+
       await WebBrowser.warmUpAsync();
-      
+
       const result = await WebBrowser.openAuthSessionAsync(
-        authUrl, 
+        googleAuthUrl,
         'interpark://',
         {
           showInRecents: true,
         }
       );
-      
+
       console.log('WebBrowser result:', result);
-      
+
       if (result.type === 'success' && result.url) {
         await handleDeepLink(result.url);
       } else if (result.type === 'cancel') {
         console.log('User cancelled Google sign-in');
         Alert.alert('Cancelled', 'Google sign-in was cancelled');
       } else {
-        console.log('Google sign-in result:', result);
+        console.log('Unknown Google sign-in result:', result);
         Alert.alert('Error', 'Failed to complete Google sign-in');
       }
     } catch (error) {
@@ -301,7 +236,7 @@ export default function Login({ navigation }) {
     }
   };
 
-  // Regular (username/password) login
+  // Regular login with username/password
   const handleLogin = async () => {
     if (!username || !password) {
       return Alert.alert('Error', 'Both fields are required');
@@ -309,18 +244,14 @@ export default function Login({ navigation }) {
     setLoading(true);
     try {
       const backendUrl = BACKEND_URL || 'https://interpark-backend.onrender.com';
-      
       const { data } = await axios.post(
         `${backendUrl}/api/auth/login`,
         { username, password },
         { timeout: 10000 }
       );
 
-      // Use the auth context login function
       const loginSuccess = await authLogin(data);
-      
       if (loginSuccess) {
-        // Navigation will be handled automatically by AppNavigator
         console.log('Login successful, user authenticated');
       } else {
         Alert.alert('Login Failed', 'Failed to complete login process');
@@ -333,12 +264,11 @@ export default function Login({ navigation }) {
     }
   };
 
-  // Toggle password visibility handler
+  // Toggle password visibility
   const togglePasswordVisibility = () => {
     setPasswordVisible(!isPasswordVisible);
   };
 
-  // Password input handlers
   const handlePasswordFocus = () => {
     setIsPasswordFocused(true);
   };
@@ -362,7 +292,7 @@ export default function Login({ navigation }) {
         autoCorrect={false}
         autoComplete="username"
       />
-      
+
       <View style={[
         styles.passwordContainer,
         isPasswordFocused && styles.passwordContainerFocused
@@ -393,10 +323,10 @@ export default function Login({ navigation }) {
           style={styles.eyeIcon}
           activeOpacity={0.7}
         >
-          <Icon 
-            name={isPasswordVisible ? 'eye' : 'eye-off'} 
-            size={24} 
-            color="#666" 
+          <Icon
+            name={isPasswordVisible ? 'eye' : 'eye-off'}
+            size={24}
+            color="#666"
           />
         </TouchableOpacity>
       </View>

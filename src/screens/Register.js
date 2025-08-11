@@ -13,88 +13,61 @@ import {
   Platform,
 } from 'react-native';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import DropDownPicker from 'react-native-dropdown-picker';
 import BouncyCheckbox from 'react-native-bouncy-checkbox';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as WebBrowser from 'expo-web-browser';
-import Constants from 'expo-constants';
-import { useAuth } from '../contexts/AuthContext'; // Import the auth context
-import {
-  GOOGLE_WEB_CLIENT_ID,
-  BACKEND_URL,
-} from '@env';
+import { useAuth } from '../contexts/AuthContext';
+import { createGoogleOAuthState } from '../utils/encoding';
+import { GOOGLE_WEB_CLIENT_ID, BACKEND_URL } from '@env';
 
 WebBrowser.maybeCompleteAuthSession();
-
-// Cross-platform base64 encoding function (same as Login.js)
-const base64Encode = (str) => {
-  try {
-    // For React Native production builds
-    if (typeof Buffer !== 'undefined') {
-      return Buffer.from(str, 'utf8').toString('base64');
-    }
-    
-    // For Expo Go and development
-    if (typeof btoa !== 'undefined') {
-      return btoa(unescape(encodeURIComponent(str)));
-    }
-    
-    // If both fail, use URL encoding as fallback
-    console.warn('Base64 encoding not available, using URL encoding fallback');
-    return encodeURIComponent(str);
-  } catch (error) {
-    console.error('Base64 encoding error:', error);
-    // Return URL encoded string as final fallback
-    return encodeURIComponent(str);
-  }
-};
 
 // Helper function to clean role string
 const cleanRole = (roleString) => {
   if (!roleString) return null;
-  
-  // Remove any trailing characters like #, &, whitespace, etc.
   const cleaned = roleString.trim().replace(/[#&\s]+$/, '');
-  
   console.log('Cleaning role:', roleString, '->', cleaned);
-  
-  // Validate the cleaned role
   if (['CLIENT', 'AGENT_LANDLORD'].includes(cleaned)) {
     return cleaned;
   }
-  
   console.warn('Invalid role after cleaning:', cleaned);
   return null;
 };
 
 export default function Register({ navigation }) {
-  // Use the auth context
-  const { login } = useAuth();
-  
+  const { login: authLogin, lastRole } = useAuth();
+
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [secureTextEntry, setSecureTextEntry] = useState(true);
   const [secureConfirmTextEntry, setSecureConfirmTextEntry] = useState(true);
-  const [role, setRole] = useState('');
+  const [role, setRole] = useState(lastRole); // ✅ Start with last used role
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState([
+  const [items] = useState([
     { label: 'Register as a Client', value: 'CLIENT' },
-    { label: 'Register as an Agent/Landlord', value: 'AGENT_LANDLORD' }
+    { label: 'Register as an Agent/Landlord', value: 'AGENT_LANDLORD' },
   ]);
   const [isTermsChecked, setTermsChecked] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  // Enhanced deep linking handler
+  // Update role state when dropdown changes
+  useEffect(() => {
+    if (role) {
+      const cleaned = cleanRole(role);
+      if (cleaned) setRole(cleaned);
+    }
+  }, [role]);
+
+  // Handle deep link from Google OAuth callback
   const handleDeepLink = async (event) => {
     let url;
-    
     if (typeof event === 'string') {
       url = event;
-    } else if (event && event.url) {
+    } else if (event?.url) {
       url = event.url;
     } else {
       console.log('No URL found in deep link event');
@@ -102,267 +75,157 @@ export default function Register({ navigation }) {
     }
 
     console.log('Processing deep link:', url);
-    
-    // Handle both interpark:// and https:// schemes
+
     if (url.includes('google-auth') || url.includes('interpark://')) {
       try {
-        let params;
-        
-        if (url.includes('?')) {
-          // Split by ? and get the query part, then split by # to remove any fragments
-          const urlParts = url.split('?');
-          const queryPart = urlParts[1];
-          
-          // Remove any URL fragments (everything after #)
-          const cleanQueryPart = queryPart.split('#')[0];
-          
-          console.log('Original query part:', queryPart);
-          console.log('Cleaned query part:', cleanQueryPart);
-          
-          params = new URLSearchParams(cleanQueryPart);
-        } else {
-          console.log('No query parameters found in URL');
-          return;
-        }
-        
+        const urlParts = url.split('?');
+        if (urlParts.length < 2) return;
+
+        const queryPart = urlParts[1].split('#')[0]; // Remove fragment
+        const params = new URLSearchParams(queryPart);
+
         const token = params.get('token');
         const roleFromUrl = params.get('role');
         const error = params.get('error');
-        
+
         if (error) {
           console.error('OAuth error:', error);
           Alert.alert('Authentication Error', error);
           return;
         }
-        
-        console.log('Extracted token:', token);
-        console.log('Extracted role from URL (raw):', roleFromUrl);
-        console.log('Current selected role:', role);
-        
+
         if (token) {
-          // Clean the role from URL and validate
           const cleanedRoleFromUrl = cleanRole(roleFromUrl);
-          const cleanedSelectedRole = cleanRole(role);
-          
-          // Use cleaned role from URL or fall back to cleaned selected role
-          let finalRole = cleanedRoleFromUrl || cleanedSelectedRole || 'CLIENT';
-          
-          // Double-check that the final role is valid
+          const finalRole = cleanedRoleFromUrl || role || 'CLIENT';
+
           if (!['CLIENT', 'AGENT_LANDLORD'].includes(finalRole)) {
-            console.warn('Final role validation failed, using CLIENT as fallback:', finalRole);
-            finalRole = 'CLIENT';
+            Alert.alert('Error', 'Invalid role. Please select one and try again.');
+            return;
           }
-          
-          console.log('Final role being sent to backend:', finalRole);
+
+          console.log('Final role for Google registration:', finalRole);
           await handleGoogleToken(token, finalRole);
         } else {
-          console.log('No token found in deep link');
           Alert.alert('Error', 'No authentication token received');
         }
-      } catch (error) {
-        console.error('Error processing deep link:', error);
+      } catch (err) {
+        console.error('Error processing deep link:', err);
         Alert.alert('Error', 'Failed to process authentication');
       }
     }
   };
 
+  // Listen to deep links
   useEffect(() => {
-    let subscription;
+    const subscription = Linking.addEventListener('url', handleDeepLink);
 
-    // Set up the linking event listener
-    const setupLinking = async () => {
-      subscription = Linking.addEventListener('url', handleDeepLink);
-
-      // Check if app was opened via deep link
-      try {
-        const initialUrl = await Linking.getInitialURL();
-        if (initialUrl) {
-          console.log('Initial URL:', initialUrl);
-          if (initialUrl.includes('google-auth') || initialUrl.includes('interpark://')) {
-            handleDeepLink(initialUrl);
-          }
-        }
-      } catch (error) {
-        console.error('Error getting initial URL:', error);
+    Linking.getInitialURL().then((initialUrl) => {
+      if (initialUrl) {
+        console.log('Initial deep link:', initialUrl);
+        handleDeepLink(initialUrl);
       }
-    };
-
-    setupLinking();
+    });
 
     return () => {
-      if (subscription) {
-        subscription.remove();
-      }
+      subscription.remove();
     };
-  }, [role]); // Added role dependency to ensure latest role is used
+  }, [role]);
 
-  // Called once we get idToken from the deep link
+  // Handle Google token from backend
   const handleGoogleToken = async (idToken, userRole) => {
-    console.log('Handling Google token for registration with role:', userRole);
-    
-    // Clean and validate role before sending to backend
     const cleanedRole = cleanRole(userRole);
     if (!cleanedRole) {
-      console.error('Invalid role detected before sending to backend:', userRole);
-      Alert.alert('Error', 'Invalid role selected. Please try again.');
-      setGoogleLoading(false);
+      Alert.alert('Error', 'Invalid role. Please try again.');
       return;
     }
-    
+
     setGoogleLoading(true);
     try {
-      console.log('Sending token to backend with cleaned role:', cleanedRole);
       const response = await axios.post(
-        `${BACKEND_URL || 'https://interpark-backend.onrender.com'}/api/auth/google`,
-        { 
-          idToken: idToken, 
-          role: cleanedRole 
-        },
+        `${BACKEND_URL}/api/auth/google`,
+        { idToken, role: cleanedRole },
         {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: 15000, // Increased timeout
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 15000,
         }
       );
 
-      console.log('Google auth response:', response.data);
-
       if (response.data.token && response.data.user) {
-        // Validate that we have the required data before calling login
-        const token = response.data.token;
-        const userData = response.data.user;
-        
-        // Ensure user data has required fields
-        if (!userData.id && !userData._id) {
-          throw new Error('Invalid user data: missing user ID');
+        const loginSuccess = await authLogin(response.data);
+        if (loginSuccess) {
+          Alert.alert(
+            'Welcome!',
+            response.data.message || 'Registration successful!'
+          );
+        } else {
+          throw new Error('Login failed');
         }
-        
-        console.log('Calling login with token and user data:', { token, userData });
-        
-        // Use the auth context login method - now properly formatted
-        const loginSuccess = await login(token, userData);
-        
-        if (!loginSuccess) {
-          throw new Error('Login failed in AuthContext');
-        }
-
-        Alert.alert(
-          'Welcome!', 
-          response.data.message || 'Google registration successful',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // The AuthContext will handle navigation automatically
-                // No manual navigation needed here
-                console.log('Google registration completed successfully');
-              }
-            }
-          ]
-        );
       } else {
-        throw new Error('Invalid response: missing token or user data');
+        throw new Error('Missing token or user data');
       }
     } catch (error) {
       console.error('Google registration error:', error);
-      let errorMessage = 'Failed to authenticate with Google';
-      
-      if (error.response) {
-        console.log('Error response status:', error.response.status);
-        console.log('Error response data:', error.response.data);
-        errorMessage = error.response.data.error || error.response.data.message || errorMessage;
-        
-        // Specific handling for role validation error
-        if (error.response.status === 400 && error.response.data.error === 'Invalid role specified') {
-          errorMessage = `Invalid role "${cleanedRole}" specified. Please select a valid role and try again.`;
-        }
+      let errorMessage = 'Registration failed';
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
       } else if (error.request) {
-        console.log('Error request:', error.request);
-        errorMessage = 'No response from server. Please check your internet connection.';
-      } else {
-        console.log('Error message:', error.message);
-        errorMessage = error.message;
+        errorMessage = 'No response from server. Check your connection.';
       }
-      
-      Alert.alert('Google Registration Failed', errorMessage);
+      Alert.alert('Registration Failed', errorMessage);
     } finally {
       setGoogleLoading(false);
     }
   };
 
-  // Enhanced Google sign-in with better error handling
+  // Google Sign-In using createGoogleOAuthState
   const handleGoogleSignIn = async () => {
     if (!role) {
       Alert.alert('Error', 'Please select your role first');
       return;
     }
-
     if (!isTermsChecked) {
       Alert.alert('Error', 'You must accept the terms and conditions');
       return;
     }
 
-    // Clean and validate role
     const cleanedRole = cleanRole(role);
     if (!cleanedRole) {
-      Alert.alert('Error', 'Please select a valid role');
+      Alert.alert('Error', 'Invalid role selected');
       return;
     }
 
     console.log('Starting Google sign-in for registration with role:', cleanedRole);
     setGoogleLoading(true);
-    
+
     try {
-      // Check if we're in development or production
-      const isDev = __DEV__ || Constants.executionEnvironment === 'storeClient';
-      
-      const state = JSON.stringify({ 
-        role: cleanedRole, // Use cleaned role
+      const state = createGoogleOAuthState({
+        role: cleanedRole,
         platform: Platform.OS,
-        isDev: isDev,
-        action: 'register', // Add action to distinguish from login
-        timestamp: Date.now() // Add timestamp for debugging
+        action: 'register',
       });
-      
-      // Use our cross-platform base64 encoding function
-      const encodedState = base64Encode(state);
-      
-      console.log('State object:', state);
-      console.log('Encoded state:', encodedState);
-      
+
       const backendUrl = BACKEND_URL || 'https://interpark-backend.onrender.com';
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${GOOGLE_WEB_CLIENT_ID}&` +
         `redirect_uri=${encodeURIComponent(`${backendUrl}/api/auth/google-callback`)}&` +
         `response_type=code&` +
-        `scope=openid%20profile%20email&` +
-        `state=${encodedState}&` +
+        `scope=openid%20email%20profile&` +
+        `state=${state}&` +
         `prompt=select_account`;
 
-      console.log('Opening Google auth URL:', authUrl);
-      console.log('Environment check - __DEV__:', __DEV__, 'Platform:', Platform.OS);
-      console.log('Constants.executionEnvironment:', Constants.executionEnvironment);
-      
+      console.log('Opening Google auth URL:', googleAuthUrl);
+
       await WebBrowser.warmUpAsync();
-      
-      const result = await WebBrowser.openAuthSessionAsync(
-        authUrl, 
-        'interpark://',
-        {
-          showInRecents: true,
-        }
-      );
-      
+      const result = await WebBrowser.openAuthSessionAsync(googleAuthUrl, 'interpark://');
+
       console.log('WebBrowser result:', result);
-      
+
       if (result.type === 'success' && result.url) {
         await handleDeepLink(result.url);
       } else if (result.type === 'cancel') {
         console.log('User cancelled Google sign-in');
         Alert.alert('Cancelled', 'Google sign-in was cancelled');
       } else {
-        console.log('Google sign-in result:', result);
         Alert.alert('Error', 'Failed to complete Google sign-in');
       }
     } catch (error) {
@@ -374,9 +237,9 @@ export default function Register({ navigation }) {
     }
   };
 
-  // Validation functions
+  // Validation
   const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
-  
+
   const validateInputs = () => {
     if (!email || !username || !password || !confirmPassword) {
       Alert.alert('Error', 'All fields are required!');
@@ -390,63 +253,55 @@ export default function Register({ navigation }) {
       Alert.alert('Error', 'Passwords do not match');
       return false;
     }
-    if (!isTermsChecked) {
-      Alert.alert('Error', 'You must accept the terms and conditions');
+    if (!role) {
+      Alert.alert('Error', 'Please select your role');
       return false;
     }
-    const cleanedRole = cleanRole(role);
-    if (!cleanedRole) {
-      Alert.alert('Error', 'Please select a valid role');
+    if (!isTermsChecked) {
+      Alert.alert('Error', 'You must accept the terms and conditions');
       return false;
     }
     return true;
   };
 
-  // Regular (form-based) registration
+  // Regular registration
   const handleRegister = async () => {
-    if (!validateInputs() || !role) {
-      if (!role) Alert.alert('Error', 'Please select your role');
-      return;
-    }
-    
+    if (!validateInputs()) return;
+
     const cleanedRole = cleanRole(role);
     if (!cleanedRole) {
-      Alert.alert('Error', 'Please select a valid role');
+      Alert.alert('Error', 'Invalid role selected');
       return;
     }
-    
-    console.log('Starting regular registration with role:', cleanedRole);
+
     setLoading(true);
     try {
       const backendUrl = BACKEND_URL || 'https://interpark-backend.onrender.com';
-      
+
+      // Check if user exists
       const { data: check } = await axios.post(
         `${backendUrl}/api/auth/verify-user`,
         { email, username },
         { timeout: 10000 }
       );
-      
+
       if (check.exists) {
         Alert.alert('Registration Failed', 'User already exists');
         setLoading(false);
         return;
       }
 
+      // Proceed with registration
       await axios.post(
         `${backendUrl}/api/auth/register`,
         { username, email, password, role: cleanedRole },
         { timeout: 10000 }
       );
-      
+
       Alert.alert(
         'Registration Successful',
         'Please check your email to confirm before logging in',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.navigate('Login')
-          }
-        ]
+        [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
       );
     } catch (err) {
       console.error('Registration error:', err);
@@ -459,10 +314,7 @@ export default function Register({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Image
-        source={require('../../assets/logo.png')}
-        style={styles.logo}
-      />
+      <Image source={require('../../assets/logo.png')} style={styles.logo} />
       <Text style={styles.title}>Register</Text>
 
       <TextInput
@@ -474,6 +326,7 @@ export default function Register({ navigation }) {
         keyboardType="email-address"
         autoCapitalize="none"
       />
+
       <TextInput
         style={styles.input}
         placeholder="Username"
@@ -483,7 +336,7 @@ export default function Register({ navigation }) {
         autoCapitalize="none"
       />
 
-      {/* PASSWORD FIELD - FIXED */}
+      {/* Password Field */}
       <View style={styles.passwordContainer}>
         <TextInput
           style={styles.passwordInput}
@@ -493,109 +346,63 @@ export default function Register({ navigation }) {
           onChangeText={setPassword}
           secureTextEntry={secureTextEntry}
           textContentType="newPassword"
-          passwordRules="minlength: 6;"
-          autoComplete="new-password"
+          autoComplete="password-new"
+          autoCapitalize="none"
           autoCorrect={false}
           spellCheck={false}
-          importantForAutofill="no"
-          keyboardType="default"
-          //blurOnSubmit={true}
-          // Force re-render when visibility changes
           key={`password-${secureTextEntry}`}
-            // Additional recommended props from the first TextInput
-          autoCapitalize="none"
-          enablesReturnKeyAutomatically={true}
-          returnKeyType="done"
-          clearButtonMode="never"
-          allowFontScaling={true}
-          underlineColorAndroid="transparent"
         />
         <TouchableOpacity
           style={styles.eyeIcon}
           onPress={() => setSecureTextEntry(!secureTextEntry)}
         >
-          <Icon
-            name={secureTextEntry ? 'eye-off' : 'eye'}
-            size={24}
-            color="gray"
-          />
+          <Icon name={secureTextEntry ? 'eye-off' : 'eye'} size={24} color="gray" />
         </TouchableOpacity>
       </View>
 
-      {/* CONFIRM PASSWORD FIELD - FIXED */}
-      <View
-        style={[
-          styles.passwordContainer,
-          password &&
-            confirmPassword &&
-            password !== confirmPassword &&
-            styles.errorContainer,
-        ]}
-      >
+      {/* Confirm Password Field */}
+      <View style={styles.passwordContainer}>
         <TextInput
           style={[
             styles.passwordInput,
-            password &&
-              confirmPassword &&
-              password !== confirmPassword &&
-              styles.errorInput,
+            password && confirmPassword && password !== confirmPassword && styles.errorInput,
           ]}
           placeholder="Confirm Password"
           placeholderTextColor={
-            password && confirmPassword && password !== confirmPassword
-              ? 'red'
-              : 'black'
+            password && confirmPassword && password !== confirmPassword ? 'red' : 'black'
           }
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry={secureConfirmTextEntry}
           textContentType="newPassword"
-          passwordRules="minlength: 6;"
-          autoComplete="new-password"
+          autoComplete="password-new"
+          autoCapitalize="none"
           autoCorrect={false}
           spellCheck={false}
-          importantForAutofill="no"
-          keyboardType="default"
-          //blurOnSubmit={true}
-          // Force re-render when visibility changes
           key={`confirmPassword-${secureConfirmTextEntry}`}
-            // Additional recommended props from the first TextInput
-          autoCapitalize="none"
-          enablesReturnKeyAutomatically={true}
-          returnKeyType="done"
-          clearButtonMode="never"
-          allowFontScaling={true}
-          underlineColorAndroid="transparent"
         />
         <TouchableOpacity
           style={styles.eyeIcon}
           onPress={() => setSecureConfirmTextEntry(!secureConfirmTextEntry)}
         >
-          <Icon
-            name={secureConfirmTextEntry ? 'eye-off' : 'eye'}
-            size={24}
-            color="gray"
-          />
+          <Icon name={secureConfirmTextEntry ? 'eye-off' : 'eye'} size={24} color="gray" />
         </TouchableOpacity>
       </View>
 
+      {/* Role Dropdown */}
       <DropDownPicker
         open={open}
         value={role}
         items={items}
         setOpen={setOpen}
         setValue={setRole}
-        setItems={setItems}
         placeholder="Select your role"
         containerStyle={styles.dropdownContainer}
         style={styles.dropdown}
         dropDownContainerStyle={styles.dropdownList}
-        onChangeValue={(value) => {
-          console.log('Role selected:', value);
-          setRole(value);
-        }}
       />
 
+      {/* Terms Checkbox */}
       <BouncyCheckbox
         size={25}
         fillColor="#005478"
@@ -611,22 +418,14 @@ export default function Register({ navigation }) {
             I agree to the{' '}
             <Text
               style={styles.checkboxLink}
-              onPress={() =>
-                Linking.openURL(
-                  'https://interparkenterprises.co.ke/terms-and-conditions/'
-                )
-              }
+              onPress={() => Linking.openURL('https://interparkenterprises.co.ke/terms-and-conditions/')}
             >
               Terms
             </Text>{' '}
             and{' '}
             <Text
               style={styles.checkboxLink}
-              onPress={() =>
-                Linking.openURL(
-                  'https://interparkenterprises.co.ke/privacy-policy/'
-                )
-              }
+              onPress={() => Linking.openURL('https://interparkenterprises.co.ke/privacy-policy/')}
             >
               Privacy Policy
             </Text>
@@ -634,11 +433,9 @@ export default function Register({ navigation }) {
         }
       />
 
+      {/* Register Button */}
       <TouchableOpacity
-        style={[
-          styles.registerButton,
-          (!role || loading) && styles.disabledButton
-        ]}
+        style={[styles.registerButton, (!role || loading) && styles.disabledButton]}
         onPress={handleRegister}
         disabled={loading || !role}
       >
@@ -649,10 +446,11 @@ export default function Register({ navigation }) {
         )}
       </TouchableOpacity>
 
+      {/* Google Sign-Up Button */}
       <TouchableOpacity
         style={[
           styles.googleButton,
-          (!role || !isTermsChecked || googleLoading) && styles.disabledButton
+          (!role || !isTermsChecked || googleLoading) && styles.disabledButton,
         ]}
         onPress={handleGoogleSignIn}
         disabled={googleLoading || !role || !isTermsChecked}
@@ -661,24 +459,15 @@ export default function Register({ navigation }) {
           <ActivityIndicator size="small" color="white" />
         ) : (
           <>
-            <Text style={styles.googleButtonText}>
-              Register with Google
-            </Text>
-            <Image
-              source={require('../../assets/google-logo-icon.png')}
-              style={styles.googleIcon}
-            />
+            <Text style={styles.googleButtonText}>Register with Google</Text>
+            <Image source={require('../../assets/google-logo-icon.png')} style={styles.googleIcon} />
           </>
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.loginButton}
-        onPress={() => navigation.navigate('Login')}
-      >
-        <Text style={styles.loginText}>
-          Already have an account? Login
-        </Text>
+      {/* Login Prompt */}
+      <TouchableOpacity style={styles.loginButton} onPress={() => navigation.navigate('Login')}>
+        <Text style={styles.loginText}>Already have an account? Login</Text>
       </TouchableOpacity>
     </View>
   );
