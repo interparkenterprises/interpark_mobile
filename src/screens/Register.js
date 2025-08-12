@@ -44,7 +44,7 @@ export default function Register({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [secureTextEntry, setSecureTextEntry] = useState(true);
   const [secureConfirmTextEntry, setSecureConfirmTextEntry] = useState(true);
-  const [role, setRole] = useState(lastRole); // ✅ Start with last used role
+  const [role, setRole] = useState(null); // Changed from  Start with last used role
   const [open, setOpen] = useState(false);
   const [items] = useState([
     { label: 'Register as a Client', value: 'CLIENT' },
@@ -397,11 +397,15 @@ export default function Register({ navigation }) {
         setOpen={setOpen}
         setValue={setRole}
         placeholder="Select your role"
+        placeholderStyle={{ color: 'black' }}
         containerStyle={styles.dropdownContainer}
         style={styles.dropdown}
         dropDownContainerStyle={styles.dropdownList}
+        onChangeValue={(value) => {
+          console.log('Role selected:', value);
+          setRole(value);
+        }}
       />
-
       {/* Terms Checkbox */}
       <BouncyCheckbox
         size={25}
