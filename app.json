@@ -42,7 +42,9 @@
         "WRITE_EXTERNAL_STORAGE",
         "INTERNET",
         "NOTIFICATIONS",
-        "VIBRATE"
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -60,23 +62,14 @@
             "DEFAULT",
             "BROWSABLE"
           ]
-        },
-        {
-          "action": "VIEW",
-          "data": [
-            {
-              "scheme": "https",
-              "host": "interpark-backend.onrender.com",
-              "pathPrefix": "/"
-            }
-          ],
-          "category": [
-            "DEFAULT",
-            "BROWSABLE"
-          ],
-          "autoVerify": true
         }
-      ]
+      ],
+      "notification": {
+        "icon": "./assets/adaptive-icon.png",
+        "color": "#005478",
+        "androidMode": "default",
+        "androidCollapsedTitle": "InterPark"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -90,7 +83,11 @@
     "scheme": "interpark",
     "newArchEnabled": true,
     "notification": {
-      "icon": "./assets/adaptive-icon.png"
+      "icon": "./assets/adaptive-icon.png",
+      "color": "#005478",
+      "iosDisplayInForeground": true,
+      "androidMode": "default",
+      "androidCollapsedTitle": "InterPark"
     },
     "plugins": [
       "expo-asset",
@@ -103,7 +100,15 @@
         }
       ],
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon.png",
+          "color": "#005478",
+          "defaultChannel": "default"
+        }
+      ]
     ]
   }
 }

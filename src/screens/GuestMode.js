@@ -166,7 +166,7 @@ function GuestPropertiesList() {
   const handleChatPress = () => {
     Alert.alert(
       'Login Required',
-      'Login with Google as a client or create an account manually and select the role of client to register.',
+      'To contact or chat',
       [
         {
           text: 'Cancel',
@@ -472,9 +472,9 @@ function BeAnAgentTab() {
     <View style={styles.beAgentTabContainer}>
       <TouchableOpacity style={styles.beAgentButton} onPress={handleBeAnAgentPress}>
         <Ionicons name="person-outline" size={50} color="#005478" />
-        <Text style={styles.beAgentButtonText}>Be an Agent</Text>
+        <Text style={styles.beAgentButtonText}>Professional Mode</Text>
         <Text style={styles.beAgentDescriptionText}>
-          To be an Agent/Lanlord, select the role Register as Agent/Landlord
+          Be an agent/landlord/property manager
         </Text>
       </TouchableOpacity>
     </View>
@@ -485,26 +485,16 @@ function BeAnAgentTab() {
 function LoginTab() {
   const navigation = useNavigation();
 
-  const handleLoginPress = () => {
+  useEffect(() => {
     const parentNav = navigation.getParent();
     if (parentNav) {
-      parentNav.navigate('Login'); // You can remove userType if you want it generic
+      parentNav.navigate("Login");
     } else {
-      console.warn('No parent navigator found');
+      console.warn("No parent navigator found");
     }
-  };
+  }, [navigation]);
 
-  return (
-    <View style={styles.loginTabContainer}>
-      <TouchableOpacity style={styles.loginButton} onPress={handleLoginPress}>
-        <Ionicons name="log-in-outline" size={50} color="#005478" />
-        <Text style={styles.loginButtonText}>Login</Text>
-        <Text style={styles.loginDescriptionText}>
-          Login to access all the full features.
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
+  return null; // don't render anything, just redirect
 }
 
 
@@ -540,7 +530,7 @@ export default function GuestMode() {
         name="BeAnAgent" 
         component={BeAnAgentTab}
         options={{
-          tabBarLabel: 'Be an Agent',
+          tabBarLabel: 'Professional Mode',
         }}
       />
       <Tab.Screen 
