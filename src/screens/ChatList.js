@@ -1,44 +1,82 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Alert, Button } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
+//import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import axios from 'axios';
 import io from 'socket.io-client';
-import { EXPO_PUBLIC_API_BASE_URL } from '@env';
+//import { EXPO_PUBLIC_API_BASE_URL } from '@env';
 import * as Notifications from 'expo-notifications';
+import { useAuth } from '../contexts/AuthContext'; // Import the auth context
 
 const ChatList = () => {
-    const [chatRooms, setChatRooms] = useState([]);
-    const [properties, setProperties] = useState({});
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredChatRooms, setFilteredChatRooms] = useState([]);
-    const [unreadCounts, setUnreadCounts] = useState({});
-    const [lastMessages, setLastMessages] = useState({});
-    const navigation = useNavigation();
     const [socket, setSocket] = useState(null);
-    const [userId, setUserId] = useState(null);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const navigation = useNavigation();
+    
+    // Get user data and chat room state from AuthContext
+    const { 
+        user, 
+        chatRooms, 
+        properties, 
+        unreadCounts, 
+        lastMessages, 
+        isLoadingChatRooms,
+        refreshChatRooms,
+        handleChatListUpdate,
+        addChatRoom,
+        updateProperty,
+        updateUnreadCount
+    } = useAuth();
 
     useEffect(() => {
-        initializeComponent();
-    }, []);
+        if (user?.id) {
+            initializeComponent();
+        }
+        
+        // Cleanup socket on unmount
+        return () => {
+            if (socket) {
+                socket.disconnect();
+            }
+        };
+    }, [user]);
+
+    // Use focus effect to ensure data is current when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            if (chatRooms && chatRooms.length > 0) {
+                setFilteredChatRooms(chatRooms);
+            }
+        }, [chatRooms])
+    );
+
+    // Update filtered chat rooms when chatRooms or search query changes
+    useEffect(() => {
+        if (searchQuery.trim() === '') {
+            setFilteredChatRooms(chatRooms);
+        } else {
+            const filtered = chatRooms.filter((room) => {
+                const propertyTitle = properties[room.propertyId] || '';
+                return propertyTitle.toLowerCase().includes(searchQuery.toLowerCase());
+            });
+            setFilteredChatRooms(filtered);
+        }
+    }, [searchQuery, chatRooms, properties]);
 
     const initializeComponent = async () => {
         try {
-            // Get user ID
-            const storedUserId = await AsyncStorage.getItem('userId');
-            if (storedUserId) {
-                setUserId(storedUserId);
-                
+            const userId = user.id;
+            
+            if (userId) {
                 // Ensure push token is registered
-                await ensurePushTokenRegistered(storedUserId);
+                await ensurePushTokenRegistered(userId);
                 
                 // Initialize socket connection
-                initializeSocket(storedUserId);
-                
-                // Load chat rooms - Pass userId directly
-                await loadChatRooms(storedUserId);
+                initializeSocket(userId);
             } else {
-                console.error('No userId found in storage');
+                console.error('No userId found');
                 Alert.alert('Error', 'User not logged in');
             }
         } catch (error) {
@@ -88,6 +126,10 @@ const ChatList = () => {
     };
 
     const initializeSocket = (userId) => {
+        if (socket) {
+            socket.disconnect();
+        }
+
         const newSocket = io('https://interpark-backend.onrender.com');
         
         newSocket.on('connect', () => {
@@ -97,28 +139,18 @@ const ChatList = () => {
 
         newSocket.on('chat_list_update', (data) => {
             console.log('Received chat list update:', data);
-            setUnreadCounts(prev => ({
-                ...prev,
-                [data.chatRoomId]: data.unreadCount
-            }));
-            setLastMessages(prev => ({
-                ...prev,
-                [data.chatRoomId]: {
-                    content: data.lastMessage,
-                    timestamp: data.lastMessageTime
-                }
-            }));
-            // Re-sort chat rooms
-            loadChatRooms(userId);
+            // Use AuthContext handler to update the global state
+            handleChatListUpdate(data);
         });
 
         newSocket.on('new_chat_room', async (newChatRoom) => {
-            setChatRooms((prevChatRooms) => {
-                const updatedChatRooms = [...prevChatRooms, newChatRoom];
-                setFilteredChatRooms(sortChatRooms(updatedChatRooms));
-                return updatedChatRooms;
-            });
-            await fetchPropertyTitle(newChatRoom.propertyId);
+            console.log('Received new chat room:', newChatRoom);
+            // Add to AuthContext state
+            addChatRoom(newChatRoom);
+            // Fetch property title if not available
+            if (!properties[newChatRoom.propertyId]) {
+                await fetchPropertyTitle(newChatRoom.propertyId);
+            }
         });
 
         newSocket.on('error', (error) => {
@@ -126,109 +158,6 @@ const ChatList = () => {
         });
 
         setSocket(newSocket);
-
-        // Cleanup function
-        return () => {
-            newSocket.disconnect();
-        };
-    };
-
-    const loadChatRooms = async (userIdParam) => {
-        try {
-            const storedChatRooms = await AsyncStorage.getItem('userChatRooms');
-            if (storedChatRooms) {
-                const parsedChatRooms = JSON.parse(storedChatRooms);
-                await loadChatRoomsWithDetails(parsedChatRooms, userIdParam);
-            }
-        } catch (error) {
-            console.error('Error loading chat rooms:', error);
-            Alert.alert('Error', 'Failed to load chat rooms.');
-        }
-    };
-
-    const loadChatRoomsWithDetails = async (chatRooms, userIdParam) => {
-        try {
-            const currentUserId = userIdParam || userId;
-            if (!currentUserId) {
-                console.error('No userId available for loading detailed rooms');
-                return;
-            }
-
-            const response = await axios.post(`https://interpark-backend.onrender.com/api/chat/detailed-rooms`, {
-                chatRoomIds: chatRooms.map(room => room.id),
-                userId: currentUserId
-            });
-
-            const detailedRooms = response.data.chatRooms;
-            const sortedRooms = sortChatRooms(detailedRooms);
-            
-            setChatRooms(sortedRooms);
-            setFilteredChatRooms(sortedRooms);
-            
-            // Extract unread counts and last messages
-            const unreadData = {};
-            const lastMessageData = {};
-            const propertyData = {};
-            
-            detailedRooms.forEach(room => {
-                unreadData[room.id] = room.unreadCount || 0;
-                if (room.lastMessage) {
-                    lastMessageData[room.id] = {
-                        content: room.lastMessage.content,
-                        timestamp: room.lastMessage.timestamp
-                    };
-                }
-                if (room.property) {
-                    propertyData[room.propertyId] = room.property.title;
-                }
-            });
-            
-            setUnreadCounts(unreadData);
-            setLastMessages(lastMessageData);
-            setProperties(propertyData);
-            
-        } catch (error) {
-            console.error('Error loading detailed chat rooms:', error);
-            // Fallback to basic loading
-            setChatRooms(chatRooms);
-            setFilteredChatRooms(chatRooms);
-            await fetchPropertyTitles(chatRooms);
-        }
-    };
-
-    const sortChatRooms = (rooms) => {
-        return [...rooms].sort((a, b) => {
-            // First priority: unread messages
-            const aUnread = a.unreadCount || 0;
-            const bUnread = b.unreadCount || 0;
-            
-            if (aUnread !== bUnread) {
-                return bUnread - aUnread;
-            }
-            
-            // Second priority: last message time
-            const aTime = a.lastMessageTime || a.updatedAt || a.createdAt;
-            const bTime = b.lastMessageTime || b.updatedAt || b.createdAt;
-            
-            return new Date(bTime) - new Date(aTime);
-        });
-    };
-
-    const fetchPropertyTitles = async (chatRooms) => {
-        try {
-            const propertyIds = chatRooms.map((room) => room.propertyId);
-            const response = await axios.post(`https://interpark-backend.onrender.com/api/properties/titles`, { propertyIds });
-            const titles = response.data.titles;
-
-            const propertyMap = {};
-            titles.forEach((title) => {
-                propertyMap[title.propertyId] = title.title;
-            });
-
-            setProperties(propertyMap);
-        } catch (error) {
-            console.error('Error fetching property titles:', error);
-        }
     };
 
     const fetchPropertyTitle = async (propertyId) => {
@@ -239,59 +168,34 @@ const ChatList = () => {
             const titles = response.data.titles;
 
             if (titles && titles.length > 0) {
-                setProperties(prev => ({
-                    ...prev,
-                    [propertyId]: titles[0].title
-                }));
+                updateProperty(propertyId, titles[0].title);
             }
         } catch (error) {
             console.error('Error fetching property title:', error);
         }
     };
 
-    const refreshChatRooms = async () => {
+    const handleRefresh = async () => {
         try {
-            if (userId) {
-                await loadChatRooms(userId);
-            } else {
-                const storedUserId = await AsyncStorage.getItem('userId');
-                if (storedUserId) {
-                    setUserId(storedUserId);
-                    await loadChatRooms(storedUserId);
-                } else {
-                    Alert.alert('Error', 'User not logged in');
-                }
-            }
+            setIsRefreshing(true);
+            await refreshChatRooms();
         } catch (error) {
             console.error('Error refreshing chat rooms:', error);
             Alert.alert('Error', 'Failed to refresh chat rooms.');
+        } finally {
+            setIsRefreshing(false);
         }
     };
 
-    useEffect(() => {
-        if (searchQuery.trim() === '') {
-            setFilteredChatRooms(chatRooms);
-        } else {
-            const filtered = chatRooms.filter((room) => {
-                const propertyTitle = properties[room.propertyId] || '';
-                return propertyTitle.toLowerCase().includes(searchQuery.toLowerCase());
-            });
-            setFilteredChatRooms(filtered);
-        }
-    }, [searchQuery, chatRooms, properties]);
-
     const handleChatRoomPress = (chatRoom) => {
-        // Clear unread count for this chat room locally
-        setUnreadCounts(prev => ({
-            ...prev,
-            [chatRoom.id]: 0
-        }));
+        // Clear unread count using AuthContext function
+        updateUnreadCount(chatRoom.id, 0);
 
         // Join the room via socket to mark messages as read
-        if (socket && userId) {
+        if (socket && user?.id) {
             socket.emit('join_room', {
                 chatRoomId: chatRoom.id,
-                userId: userId
+                userId: user.id
             });
         }
 
@@ -363,6 +267,8 @@ const ChatList = () => {
         );
     };
 
+    const isLoading = isLoadingChatRooms || isRefreshing;
+
     return (
         <View style={styles.container}>
             <Text style={styles.title}>All Chats</Text>
@@ -373,14 +279,22 @@ const ChatList = () => {
                 value={searchQuery}
                 onChangeText={setSearchQuery}
             />
-            <Button title="Refresh" onPress={refreshChatRooms} color="#005478" />
+            <Button 
+                title={isLoading ? "Loading..." : "Refresh"} 
+                onPress={handleRefresh} 
+                color="#005478" 
+                disabled={isLoading}
+            />
             {filteredChatRooms.length === 0 ? (
-                <Text style={styles.noChatRoomsText}>No chat rooms available.</Text>
+                <Text style={styles.noChatRoomsText}>
+                    {isLoading ? 'Loading chat rooms...' : 'No chat rooms available.'}
+                </Text>
             ) : (
                 <FlatList
                     data={filteredChatRooms}
                     keyExtractor={(item) => item.id.toString()}
                     renderItem={renderChatRoom}
+                    extraData={[unreadCounts, lastMessages, properties]} // Re-render when these change
                 />
             )}
         </View>

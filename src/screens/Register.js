@@ -350,7 +350,7 @@ export default function Register({ navigation }) {
           autoCapitalize="none"
           autoCorrect={false}
           spellCheck={false}
-          key={`password-${secureTextEntry}`}
+          //key={`password-${secureTextEntry}`}
         />
         <TouchableOpacity
           style={styles.eyeIcon}
@@ -379,7 +379,7 @@ export default function Register({ navigation }) {
           autoCapitalize="none"
           autoCorrect={false}
           spellCheck={false}
-          key={`confirmPassword-${secureConfirmTextEntry}`}
+          //key={`confirmPassword-${secureConfirmTextEntry}`}
         />
         <TouchableOpacity
           style={styles.eyeIcon}
@@ -520,8 +520,8 @@ const styles = StyleSheet.create({
     textAlignVertical: 'center',
     fontSize: 16,
     // Additional styles for better password handling in APK
-    fontFamily: Platform.OS === 'android' ? 'monospace' : 'System',
-    letterSpacing: Platform.OS === 'android' ? 1 : 0,
+    //fontFamily: Platform.OS === 'android' ? 'monospace' : 'System',
+    //letterSpacing: Platform.OS === 'android' ? 1 : 0,
   },
   eyeIcon: {
     position: 'absolute',

@@ -17,7 +17,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import axios from 'axios';
 import Slider from '@react-native-community/slider';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 const Tab = createBottomTabNavigator();
@@ -481,22 +481,52 @@ function BeAnAgentTab() {
   );
 }
 
-// Login Tab Component
+// Updated Login Tab Component with proper logic
 function LoginTab() {
   const navigation = useNavigation();
+  const [shouldRedirectToProperties, setShouldRedirectToProperties] = useState(false);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      // Check if we should redirect to Properties (when user returns from Login screen)
+      if (shouldRedirectToProperties) {
+        // Reset the flag and redirect to Properties
+        setShouldRedirectToProperties(false);
+        const timer = setTimeout(() => {
+          navigation.navigate('Properties');
+        }, 100);
+        return () => clearTimeout(timer);
+      } else {
+        // Normal case: user clicked Login tab, navigate to Login screen
+        const parentNav = navigation.getParent();
+        if (parentNav) {
+          // Set flag for when user returns
+          setShouldRedirectToProperties(true);
+          parentNav.navigate("Login");
+        } else {
+          console.warn("No parent navigator found");
+        }
+      }
+    }, [navigation, shouldRedirectToProperties])
+  );
+
+  // Listen for navigation state changes to detect when user returns from Login
   useEffect(() => {
-    const parentNav = navigation.getParent();
-    if (parentNav) {
-      parentNav.navigate("Login");
-    } else {
-      console.warn("No parent navigator found");
-    }
+    const unsubscribe = navigation.addListener('focus', () => {
+      // This will trigger the useFocusEffect above
+    });
+
+    return unsubscribe;
   }, [navigation]);
 
-  return null; // don't render anything, just redirect
+  // Render a temporary loading view while processing
+  return (
+    <View style={styles.loginTabContainer}>
+      <ActivityIndicator size="large" color="#005478" />
+      <Text style={styles.redirectingText}>Loading...</Text>
+    </View>
+  );
 }
-
 
 // Main GuestMode Component with Tab Navigator
 export default function GuestMode() {
@@ -518,6 +548,7 @@ export default function GuestMode() {
         tabBarInactiveTintColor: 'gray',
         headerShown: false,
       })}
+      initialRouteName="Properties"
     >
       <Tab.Screen 
         name="Properties" 
@@ -798,33 +829,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0E0E0',
     padding: 20,
   },
-  loginButton: {
-    alignItems: 'center',
-    padding: 30,
-    backgroundColor: '#ffffff',
-    borderRadius: 15,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-    minWidth: 280,
-  },
-  loginButtonText: {
+  redirectingText: {
     marginTop: 15,
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
     color: '#005478',
     textAlign: 'center',
-  },
-  loginDescriptionText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#7F7F7F',
-    textAlign: 'center',
-    lineHeight: 20,
   },
 });

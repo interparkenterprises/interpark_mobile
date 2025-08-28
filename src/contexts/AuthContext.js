@@ -1,10 +1,9 @@
-// contexts/AuthContext.js
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import { BACKEND_URL } from '@env';
+import { Alert } from 'react-native';
 
-const AuthContext = createContext({});
+const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -16,12 +15,18 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [lastRole, setLastRole] = useState('CLIENT'); // Default role
+  const [lastRole, setLastRole] = useState(null);
+  
+  // Chat rooms state for preloading and persistent state management
+  const [chatRooms, setChatRooms] = useState([]);
+  const [properties, setProperties] = useState({});
+  const [unreadCounts, setUnreadCounts] = useState({});
+  const [lastMessages, setLastMessages] = useState({});
+  const [isLoadingChatRooms, setIsLoadingChatRooms] = useState(false);
 
-  // Check for existing auth data on app startup
+  // Check if user is already logged in when app starts
   useEffect(() => {
     checkAuthState();
   }, []);
@@ -29,178 +34,334 @@ export const AuthProvider = ({ children }) => {
   const checkAuthState = async () => {
     try {
       setIsLoading(true);
-
-      const storedToken = await AsyncStorage.getItem('auth_token');
-      const storedUser = await AsyncStorage.getItem('user');
-      const storedRole = await AsyncStorage.getItem('lastRole'); // Load last role
+      
+      // Check for stored authentication data
+      const [storedToken, storedUser, storedRole] = await Promise.all([
+        AsyncStorage.getItem('userToken'),
+        AsyncStorage.getItem('userData'),
+        AsyncStorage.getItem('lastRole')
+      ]);
 
       if (storedToken && storedUser) {
-        console.log('Found stored auth data, validating...');
-
-        // Validate token with backend
-        const isValid = await validateToken(storedToken);
-
-        if (isValid) {
-          console.log('Token is valid, logging user in automatically');
-          const userData = JSON.parse(storedUser);
-          setToken(storedToken);
-          setUser(userData);
-          setIsAuthenticated(true);
-
-          // Use stored role or fallback to user role or default
-          const role = storedRole || userData.role || 'CLIENT';
-          setLastRole(role);
-        } else {
-          console.log('Token is invalid, clearing stored data');
-          await clearAuthData();
+        const userData = JSON.parse(storedUser);
+        setUser(userData);
+        setIsAuthenticated(true);
+        
+        if (storedRole) {
+          setLastRole(storedRole);
         }
-      } else {
-        console.log('No stored auth data found');
-        // Still set lastRole from storage even if not logged in
-        setLastRole(storedRole || 'CLIENT');
+
+        // Preload chat rooms for returning user
+        if (userData.id || userData.userId) {
+          await preloadChatRooms(userData.id || userData.userId);
+        }
       }
     } catch (error) {
       console.error('Error checking auth state:', error);
+      // Clear potentially corrupted data
       await clearAuthData();
     } finally {
       setIsLoading(false);
     }
   };
 
-  const validateToken = async (tokenToValidate) => {
+  const sortChatRooms = (rooms) => {
+    return [...rooms].sort((a, b) => {
+      // First priority: unread messages
+      const aUnread = a.unreadCount || 0;
+      const bUnread = b.unreadCount || 0;
+      
+      if (aUnread !== bUnread) {
+        return bUnread - aUnread;
+      }
+      
+      // Second priority: last message time
+      const aTime = a.lastMessageTime || a.updatedAt || a.createdAt;
+      const bTime = b.lastMessageTime || b.updatedAt || b.createdAt;
+      
+      return new Date(bTime) - new Date(aTime);
+    });
+  };
+
+  const preloadChatRooms = async (userId) => {
     try {
-      const backendUrl = BACKEND_URL || 'https://interpark-backend.onrender.com';
+      setIsLoadingChatRooms(true);
+      console.log('Preloading chat rooms for user:', userId);
+      
+      // Get stored chat rooms
+      const storedChatRooms = await AsyncStorage.getItem('userChatRooms');
+      if (storedChatRooms) {
+        const parsedChatRooms = JSON.parse(storedChatRooms);
+        
+        if (parsedChatRooms.length > 0) {
+          // Load detailed chat rooms from backend
+          const response = await axios.post(
+            `https://interpark-backend.onrender.com/api/chat/detailed-rooms`, 
+            {
+              chatRoomIds: parsedChatRooms.map(room => room.id),
+              userId: userId
+            },
+            {
+              timeout: 10000 // 10 second timeout
+            }
+          );
 
-      const response = await axios.get(`${backendUrl}/api/auth/validate-token`, {
-        headers: {
-          Authorization: `Bearer ${tokenToValidate}`,
-        },
-        timeout: 10000,
-      });
-
-      return response.status === 200;
+          if (response.data && response.data.chatRooms) {
+            const detailedRooms = response.data.chatRooms;
+            const sortedRooms = sortChatRooms(detailedRooms);
+            
+            setChatRooms(sortedRooms);
+            
+            // Extract unread counts, last messages, and property data
+            const unreadData = {};
+            const lastMessageData = {};
+            const propertyData = {};
+            
+            detailedRooms.forEach(room => {
+              unreadData[room.id] = room.unreadCount || 0;
+              if (room.lastMessage) {
+                lastMessageData[room.id] = {
+                  content: room.lastMessage.content,
+                  timestamp: room.lastMessage.timestamp
+                };
+              }
+              if (room.property) {
+                propertyData[room.propertyId] = room.property.title;
+              }
+            });
+            
+            setUnreadCounts(unreadData);
+            setLastMessages(lastMessageData);
+            setProperties(propertyData);
+            
+            console.log(`Successfully preloaded ${sortedRooms.length} chat rooms`);
+          }
+        } else {
+          console.log('No stored chat rooms found');
+          setChatRooms([]);
+          setProperties({});
+          setUnreadCounts({});
+          setLastMessages({});
+        }
+      } else {
+        console.log('No userChatRooms in AsyncStorage');
+        setChatRooms([]);
+        setProperties({});
+        setUnreadCounts({});
+        setLastMessages({});
+      }
     } catch (error) {
-      console.error('Token validation failed:', error);
-      return false;
+      console.error('Error preloading chat rooms:', error);
+      // Don't show alert for preloading errors as it's not critical
+      // Just log and continue
+      setChatRooms([]);
+      setProperties({});
+      setUnreadCounts({});
+      setLastMessages({});
+    } finally {
+      setIsLoadingChatRooms(false);
     }
   };
 
-  // Updated login function to handle both parameter styles
-  const login = async (tokenOrAuthData, userData = null) => {
+  const login = async (userData) => {
     try {
-      let authToken, userInfo;
-
-      // Handle both calling styles:
-      // 1. login({ token, user }) - object style
-      // 2. login(token, userData) - separate parameters style
-      if (typeof tokenOrAuthData === 'object' && tokenOrAuthData !== null) {
-        authToken = tokenOrAuthData.token;
-        userInfo = tokenOrAuthData.user;
-      } else {
-        authToken = tokenOrAuthData;
-        userInfo = userData;
+      console.log('Starting login process with userData:', userData);
+      
+      // Extract user information
+      const { token, user: userInfo, message, role } = userData;
+      
+      if (!token || !userInfo) {
+        throw new Error('Invalid login data received');
       }
 
-      // Validate required data
-      if (!authToken) {
-        throw new Error('No authentication token provided');
-      }
-      if (!userInfo) {
-        throw new Error('No user data provided');
-      }
-      if (!userInfo.id && !userInfo._id) {
-        throw new Error('Invalid user data: missing user ID');
-      }
+      // Prepare user data for storage
+      const userDataToStore = {
+        id: userInfo.id,
+        userId: userInfo.id, // Keep both for compatibility
+        username: userInfo.username,
+        email: userInfo.email,
+        role: userInfo.role || role,
+        ...userInfo
+      };
 
-      // Extract role from user data
-      const userRole = userInfo.role || 'CLIENT';
-
-      console.log('Storing auth data - Token:', !!authToken, 'User:', !!userInfo, 'Role:', userRole);
-
-      // Save to AsyncStorage
-      await AsyncStorage.setItem('auth_token', authToken);
-      await AsyncStorage.setItem('user', JSON.stringify(userInfo));
-      await AsyncStorage.setItem('userId', userInfo.id || userInfo._id);
-      await AsyncStorage.setItem('lastRole', userRole); // ✅ Save last used role
+      // Store authentication data
+      await Promise.all([
+        AsyncStorage.setItem('userToken', token),
+        AsyncStorage.setItem('userData', JSON.stringify(userDataToStore)),
+        AsyncStorage.setItem('userId', userInfo.id.toString()),
+        role && AsyncStorage.setItem('lastRole', role)
+      ]);
 
       // Update state
-      setToken(authToken);
-      setUser(userInfo);
+      setUser(userDataToStore);
       setIsAuthenticated(true);
-      setLastRole(userRole);
-
-      // Set default axios header
-      axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
-
-      console.log('Auth state updated successfully');
-
-      // Preload chat rooms
-      try {
-        const backendUrl = BACKEND_URL || 'https://interpark-backend.onrender.com';
-        const userId = userInfo.id || userInfo._id;
-        const roomsRes = await axios.get(`${backendUrl}/api/chat/rooms/${userId}`, {
-          headers: { Authorization: `Bearer ${authToken}` },
-          timeout: 10000,
-        });
-        await AsyncStorage.setItem('userChatRooms', JSON.stringify(roomsRes.data));
-        console.log('Chat rooms preloaded successfully');
-      } catch (err) {
-        console.warn('Could not preload chat rooms:', err);
+      
+      if (role) {
+        setLastRole(role);
       }
+
+      console.log('User data stored successfully');
+
+      // Preload chat rooms in background (don't await to avoid blocking login)
+      preloadChatRooms(userInfo.id).catch(error => {
+        console.error('Background chat room preloading failed:', error);
+      });
 
       return true;
     } catch (error) {
-      console.error('Login error in AuthContext:', error);
-      await clearAuthData();
+      console.error('Login process error:', error);
+      Alert.alert('Login Error', error.message || 'Failed to complete login');
       return false;
     }
   };
 
   const logout = async () => {
     try {
+      console.log('Starting logout process');
+      
+      // Clear authentication data
       await clearAuthData();
-      console.log('User logged out successfully');
+      
+      // Clear chat rooms data
+      setChatRooms([]);
+      setProperties({});
+      setUnreadCounts({});
+      setLastMessages({});
+      
+      // Update state
+      setUser(null);
+      setIsAuthenticated(false);
+      
+      console.log('Logout completed successfully');
+      return true;
     } catch (error) {
       console.error('Logout error:', error);
+      Alert.alert('Logout Error', 'Failed to logout properly');
+      return false;
     }
   };
 
   const clearAuthData = async () => {
     try {
-      // Clear all relevant keys
-      await AsyncStorage.multiRemove([
-        'auth_token',
-        'user',
-        'userId',
-        'userChatRooms',
-        'lastRole', // ✅ Remove lastRole on logout
+      await Promise.all([
+        AsyncStorage.removeItem('userToken'),
+        AsyncStorage.removeItem('userData'),
+        AsyncStorage.removeItem('userId'),
+        // Don't remove lastRole as it should persist for next login
       ]);
-
-      // Clear axios default header
-      delete axios.defaults.headers.common['Authorization'];
-
-      // Reset state
-      setToken(null);
-      setUser(null);
-      setIsAuthenticated(false);
-      setLastRole('CLIENT'); // Reset to default
-
-      console.log('Auth data cleared successfully');
     } catch (error) {
       console.error('Error clearing auth data:', error);
     }
   };
 
-  const value = {
+  // Function to refresh chat rooms (can be called from ChatList)
+  const refreshChatRooms = async () => {
+    if (user && (user.id || user.userId)) {
+      await preloadChatRooms(user.id || user.userId);
+    }
+  };
+
+  // Function to update chat room (for real-time updates)
+  const updateChatRoom = (chatRoomId, updates) => {
+    setChatRooms(prevRooms => {
+      const roomIndex = prevRooms.findIndex(room => room.id === chatRoomId);
+      if (roomIndex >= 0) {
+        const updatedRooms = [...prevRooms];
+        updatedRooms[roomIndex] = { ...updatedRooms[roomIndex], ...updates };
+        return sortChatRooms(updatedRooms);
+      }
+      return prevRooms;
+    });
+  };
+
+  // Function to add new chat room
+  const addChatRoom = (newRoom) => {
+    setChatRooms(prevRooms => {
+      // Check if room already exists
+      if (prevRooms.find(room => room.id === newRoom.id)) {
+        return prevRooms;
+      }
+      return sortChatRooms([...prevRooms, newRoom]);
+    });
+  };
+
+  // Function to update unread count
+  const updateUnreadCount = (chatRoomId, count) => {
+    setUnreadCounts(prev => ({
+      ...prev,
+      [chatRoomId]: count
+    }));
+    
+    // Also update the chat room with new unread count
+    updateChatRoom(chatRoomId, { unreadCount: count });
+  };
+
+  // Function to update last message
+  const updateLastMessage = (chatRoomId, message, timestamp) => {
+    setLastMessages(prev => ({
+      ...prev,
+      [chatRoomId]: {
+        content: message,
+        timestamp: timestamp
+      }
+    }));
+    
+    // Also update the chat room with new last message data
+    updateChatRoom(chatRoomId, { 
+      lastMessage: { content: message, timestamp: timestamp },
+      lastMessageTime: timestamp
+    });
+  };
+
+  // Function to update property data
+  const updateProperty = (propertyId, title) => {
+    setProperties(prev => ({
+      ...prev,
+      [propertyId]: title
+    }));
+  };
+
+  // Function to handle chat list updates (from socket)
+  const handleChatListUpdate = (data) => {
+    updateUnreadCount(data.chatRoomId, data.unreadCount);
+    updateLastMessage(data.chatRoomId, data.lastMessage, data.lastMessageTime);
+  };
+
+  const contextValue = {
+    // User state
     user,
-    token,
-    isLoading,
     isAuthenticated,
-    lastRole, // ✅ Expose lastRole to components
+    isLoading,
+    lastRole,
+    
+    // Chat rooms state
+    chatRooms,
+    properties,
+    unreadCounts,
+    lastMessages,
+    isLoadingChatRooms,
+    
+    // Auth functions
     login,
     logout,
     checkAuthState,
+    
+    // Chat room functions
+    preloadChatRooms,
+    refreshChatRooms,
+    updateChatRoom,
+    addChatRoom,
+    updateUnreadCount,
+    updateLastMessage,
+    updateProperty,
+    handleChatListUpdate,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={contextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
+
+export default AuthContext;
