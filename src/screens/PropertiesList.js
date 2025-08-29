@@ -8,6 +8,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { API_BASE_URL } from '@env';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Slider from '@react-native-community/slider';
+import { useAuth } from '../contexts/AuthContext'; // Import the AuthContext
 
 const { width } = Dimensions.get('window');
 
@@ -22,7 +23,6 @@ export default function PropertiesList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState(''); // Debounced search query
   const [selectedType, setSelectedType] = useState('All'); // Added state for filtering
-  const [userRole, setUserRole] = useState('');
   const [favorites, setFavorites] = useState([]);
   
   // Price range filter states
@@ -35,6 +35,9 @@ export default function PropertiesList() {
   const navigation = useNavigation();
   const route = useRoute();
   const { propertyId } = route.params || {};
+
+  // Use AuthContext for user data
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
 
   const getImageUrl = (filename) =>
     `https://interpark-uploads.nyc3.cdn.digitaloceanspaces.com/Propertypic/${filename}`;
@@ -55,7 +58,7 @@ export default function PropertiesList() {
     else setLoading(true);
 
     try {
-      const token = await AsyncStorage.getItem('auth_token');
+      const token = await AsyncStorage.getItem('userToken') || await AsyncStorage.getItem('auth_token');
       const response = await fetch(`https://interpark-backend.onrender.com/api/properties/`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -79,73 +82,31 @@ export default function PropertiesList() {
     }
   };
 
-  const fetchUserRole = async () => {
-    try {
-      const user = await AsyncStorage.getItem('user');
-      if (user) {
-        const parsedUser = JSON.parse(user);
-        setUserRole(parsedUser.role);
-      } else {
-        console.warn('User not found in AsyncStorage.');
-      }
-    } catch (error) {
-      console.error('Error fetching user role:', error);
-      Alert.alert('Error', 'Failed to load user role.');
-    }
-  };
-
-  const fetchUserId = async () => {
-    try {
-      const user = await AsyncStorage.getItem('user');
-      if (user) {
-        const parsedUser = JSON.parse(user);
-        console.log('Parsed User:', parsedUser); // Debug: Log the full user object
-  
-        // Extract the id property and use it as userId
-        if (parsedUser.id) {
-          console.log('Fetched User ID:', parsedUser.id); // Debug: Log the userId
-          return parsedUser.id;
-        } else {
-          console.warn('User ID not found in parsed user object.');
-          return null;
-        }
-      } else {
-        console.warn('User not found in AsyncStorage.');
-        return null;
-      }
-    } catch (error) {
-      console.error('Error fetching userId:', error);
-      Alert.alert('Error', 'Failed to load user ID.');
-      return null;
-    }
-  };
-  
-  
-
   const toggleFavorite = async (propertyId) => {
     try {
-      const userId = await fetchUserId(); // Fetch the userId
-      if (!userId) {
-        throw new Error('User ID not available');
+      if (!user || !user.id) {
+        Alert.alert('Error', 'Please log in to add favorites');
+        return;
       }
-  
+
+      const userId = user.id;
       const isFavorite = favorites.some(
         (item) => item.property._id.$oid === propertyId
       );
       const method = isFavorite ? 'delete' : 'post';
-      const endpoint = isFavorite ? '/favorites/remove' : '/favorites/add'; // Adjusted the endpoint
-  
+      const endpoint = isFavorite ? '/favorites/remove' : '/favorites/add';
+
       console.log('Toggling favorite:', { method, endpoint, userId, propertyId });
-  
+
       // Make the API request
       const response = await axios({
         method,
         url: `https://interpark-backend.onrender.com/api${endpoint}`,
         data: { userId, propertyId },
       });
-  
+
       console.log('API Response:', response.data);
-  
+
       if (isFavorite) {
         setFavorites(favorites.filter((item) => item.property._id.$oid !== propertyId));
       } else {
@@ -156,39 +117,41 @@ export default function PropertiesList() {
       Alert.alert('Error', 'Failed to update favorite');
     }
   };
-  
 
   const fetchFavorites = async (userId) => {
+    if (!userId) return;
+    
     try {
       const response = await axios.get(`https://interpark-backend.onrender.com/api/favorites/${userId}`);
       setFavorites(response.data.favorites || []);
     } catch (error) {
-      //console.error('Error fetching favorites:', error);
-      //Alert.alert('Error', 'Failed to load favorites.');
+      console.error('Error fetching favorites:', error);
+      // Don't show alert for favorites error as it's not critical
     }
   };
-
-  
 
   useEffect(() => {
-  const fetchData = async () => {
-    await fetchUserRole();
-    await fetchProperties();
+    const fetchData = async () => {
+      console.log('Starting data fetch. Auth loading:', authLoading, 'User:', user);
+      
+      // Wait for auth to finish loading
+      if (authLoading) {
+        return;
+      }
 
-    // Fetch the user ID and load favorites
-    const userId = await fetchUserId();
-    if (userId) {
-      await fetchFavorites(userId); // Fetch and store favorites
-    }
+      await fetchProperties();
 
-    setLoading(false);
-  };
+      // Fetch favorites if user is a client and authenticated
+      if (user && user.id && user.role === 'CLIENT') {
+        console.log('Fetching favorites for client user:', user.id);
+        await fetchFavorites(user.id);
+      }
 
-  fetchData();
-}, []);
+      setLoading(false);
+    };
 
-  
-
+    fetchData();
+  }, [user, authLoading]); // Add user and authLoading as dependencies
 
   useEffect(() => {
     if (propertyId && properties.length > 0) {
@@ -202,16 +165,14 @@ export default function PropertiesList() {
       }
     }
   }, [propertyId, properties]);
-  
-  
 
   const handleChatRoomNavigation = async (propertyId, agentLandlordId) => {
-    const clientId = await AsyncStorage.getItem('userId'); // Retrieve client ID from AsyncStorage
+    const clientId = user?.id || await AsyncStorage.getItem('userId');
 
     try {
         const response = await axios.post(`https://interpark-backend.onrender.com/api/chat/create`, {
             propertyId: String(propertyId),
-            agentLandlordId:  String(agentLandlordId), // Ensure it's a string
+            agentLandlordId:  String(agentLandlordId),
             clientId: String(clientId),
         });
 
@@ -222,12 +183,6 @@ export default function PropertiesList() {
         Alert.alert('Error', 'Could not open chat room.');
     }
   };
- 
-  
-
-
-
-
 
   const openImageModal = (images, index) => {
     setSelectedImages(images);
@@ -238,8 +193,6 @@ export default function PropertiesList() {
   const toggleMoreInfo = (propertyId) => {
     setExpandedProperty(expandedProperty === propertyId ? null : propertyId);
   };
-
-  
 
   const getUniqueTypes = (properties) => {
     const types = properties.map((item) => item.type);
@@ -298,50 +251,69 @@ export default function PropertiesList() {
     const imageFilenames = item.images || [];
     const propertyLocation = item.location || 'Unknown Location';
     const propertyPurpose = item.purpose || 'Unknown Purpose';
-      // Check if the property is in favorites
+    // Check if the property is in favorites
     const isFavorite = favorites.some(fav => fav.property._id.$oid === item._id.$oid);
+    
+    // Get user role - use context user data
+    const userRole = user?.role;
+    const isClient = userRole === 'CLIENT';
+    
+    console.log('Rendering property, userRole:', userRole, 'isClient:', isClient, 'user:', user);
+    
     return (
       <View style={styles.propertyCard}>
-        {imageFilenames.length > 0 ? (
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            style={styles.imageScroll}
-          >
-            {imageFilenames.map((filename, index) => (
-              <TouchableOpacity key={index} onPress={() => openImageModal(imageFilenames, index)}>
-                <Image
-                  source={{ uri: getImageUrl(filename) }}
-                  style={styles.propertyImage}
-                  onError={(e) => console.error('Image load error:', e.nativeEvent.error)}
-                />
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        ) : (
-          <View style={styles.placeholderImage}>
-            <Text style={styles.placeholderText}>No Images Available</Text>
-          </View>
-        )}
-        <View style={styles.propertyInfo}>
-          <Text style={styles.propertyTitle}>{item.title || 'Untitled Property'}</Text>
-          {/* Heart icon for favorites */}
-          {userRole === 'CLIENT' && ( 
-            <TouchableOpacity
-            onPress={() => toggleFavorite(item._id.$oid)}
-            style={styles.favoriteIconContainer}
-          >
-            <Ionicons
-              name={isFavorite ? 'heart' : 'heart-outline'}
-              size={30}
-              color={isFavorite ? '#005478' : '#ffffff'} // Orange when favorited
-              style={styles.favoriteIcon}
-            />
-          </TouchableOpacity>
-
+        <View style={styles.imageContainer}>
+          {imageFilenames.length > 0 ? (
+            <ScrollView
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.imageScroll}
+            >
+              {imageFilenames.map((filename, index) => (
+                <TouchableOpacity key={index} onPress={() => openImageModal(imageFilenames, index)}>
+                  <Image
+                    source={{ uri: getImageUrl(filename) }}
+                    style={styles.propertyImage}
+                    onError={(e) => console.error('Image load error:', e.nativeEvent.error)}
+                  />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.placeholderImage}>
+              <Text style={styles.placeholderText}>No Images Available</Text>
+            </View>
           )}
           
+          {/* Heart icon for favorites - positioned over the image */}
+          {isClient && (
+            <TouchableOpacity
+              onPress={() => toggleFavorite(item._id.$oid)}
+              style={styles.favoriteIconContainer}
+            >
+              <Ionicons
+                name={isFavorite ? 'heart' : 'heart-outline'}
+                size={30}
+                color={isFavorite ? '#ff6b6b' : '#ffffff'}
+                style={styles.favoriteIcon}
+              />
+            </TouchableOpacity>
+          )}
+          
+          {/* Chat icon for clients */}
+          {isClient && (
+            <TouchableOpacity
+              onPress={() => handleChatRoomNavigation(item._id.$oid, item.agentLandlordId.$oid)}
+              style={styles.messageIconContainer}
+            >
+              <Ionicons name="chatbubbles-outline" size={25} color="#ffffff" style={styles.messageIcon} />
+            </TouchableOpacity>
+          )}
+        </View>
+        
+        <View style={styles.propertyInfo}>
+          <Text style={styles.propertyTitle}>{item.title || 'Untitled Property'}</Text>
 
           <View style={styles.locationContainer}>
             <TouchableOpacity onPress={() => toggleMoreInfo(item._id.$oid)}>
@@ -352,15 +324,6 @@ export default function PropertiesList() {
 
           <Text style={styles.propertyPrice}>{currency} {price.toFixed(2)}</Text>
           <Text style={styles.propertyPurpose}>{propertyPurpose}</Text>
-
-          {userRole === 'CLIENT' && (
-            <TouchableOpacity
-              onPress={() => handleChatRoomNavigation(item._id.$oid, item.agentLandlordId.$oid)}
-            >
-              <Ionicons name="chatbubbles-outline" size={25} color="#ffffff" style={styles.messageIcon} />
-            </TouchableOpacity>
-          )}
-          
           
           <TouchableOpacity onPress={() => toggleMoreInfo(item._id.$oid)} style={styles.moreInfoContainer}>
             <Text style={styles.moreInfoText}>More Info</Text>
@@ -389,6 +352,16 @@ export default function PropertiesList() {
       </View>
     );
   };
+
+  // Show loading if auth is still loading
+  if (authLoading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#005478" style={{ marginTop: 50 }} />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -518,7 +491,7 @@ export default function PropertiesList() {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#0000ff" />
+        <ActivityIndicator size="large" color="#005478" />
       ) : filteredProperties.length > 0 ? (
         <FlatList
           ref={scrollRef}
@@ -579,13 +552,11 @@ export default function PropertiesList() {
   );
 }
 
-
-
-
 // Define the styles - UPDATED TO FIX TEXT CLIPPING AND ADD PRICE FILTER STYLES
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#E0E0E0' },
   searchBar: { backgroundColor: '#7F7F7F', color: '#1B1B1B', padding: 10, margin: 10,marginTop: 35, borderRadius: 8 },
+  loadingText: { textAlign: 'center', marginTop: 20, color: '#005478', fontSize: 16 },
   
   // Updated filter bar styles for horizontal scrolling with proper text visibility
   filterBarScrollView: {
@@ -731,21 +702,56 @@ const styles = StyleSheet.create({
   noResultsText: { color: '#7F7F7F', textAlign: 'center', marginTop: 20, fontSize: 16 },
   loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#231F20' },
   propertyCard: { backgroundColor: '#7F7F7F', borderRadius: 10, padding: 10, marginVertical: 8, marginHorizontal: 16 },
+  
+  // Image container to handle positioning
+  imageContainer: {
+    position: 'relative',
+  },
   propertyImage: { width: width - 40, height: 200, borderRadius: 10 },
   imageScroll: { height: 200 },
+  placeholderImage: {
+    width: width - 40,
+    height: 200,
+    borderRadius: 10,
+    backgroundColor: '#444444',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    color: '#ffffff',
+    fontSize: 16,
+  },
+  
   propertyInfo: { paddingVertical: 10 },
-  messageIcon: {marginLeft: 280 },
-  favoriteIconContainer: {
+  
+  // Updated message icon styles
+  messageIconContainer: {
     position: 'absolute',
     top: 10,
     right: 10,
+    backgroundColor: 'rgba(0, 84, 120, 0.8)',
+    borderRadius: 20,
+    padding: 8,
+    zIndex: 2, // Higher z-index than favorite
+  },
+  messageIcon: {
+    color: '#ffffff',
+  },
+  
+  // Updated favorite icon styles
+  favoriteIconContainer: {
+    position: 'absolute',
+    top: 10,
+    right: 60, // Adjusted to not overlap with chat icon
     zIndex: 1, // Ensure it overlays on top of the image
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent background
+    borderRadius: 20,
+    padding: 8,
   },
   favoriteIcon: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)', // Semi-transparent background
-    borderRadius: 15, // Make the icon circular
-    padding: 5, // Space around the icon
+    // Icon styles handled by the Ionicons component
   },
+  
   propertyTitle: { fontSize: 18, fontWeight: 'bold', color: '#ffffff' },
   locationContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
   propertyLocation: { color: '#cccccc', marginLeft: 5 },
@@ -785,5 +791,4 @@ const styles = StyleSheet.create({
   inactiveDot: {
     backgroundColor: '#005478',
   },
-  
 });

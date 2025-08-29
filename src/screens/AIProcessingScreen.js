@@ -157,9 +157,11 @@ export default function AIProcessingScreen() {
 
   const handleClose = () => {
     if (status === 'success' && onSuccessRedirect) {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: onSuccessRedirect }]
+      // Navigate back to the tab navigator and then to the specific tab
+      // This preserves the tab navigator context
+      navigation.navigate('AgentDashboard', {
+        screen: onSuccessRedirect,
+        params: { refresh: true } // Optional: to trigger a refresh of the properties list
       });
     } else {
       navigation.goBack();

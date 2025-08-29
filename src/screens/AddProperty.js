@@ -132,6 +132,7 @@ export default function AddProperty() {
             localImageUris: images
         };
 
+        // Navigate to AIProcessing within the same stack
         navigation.navigate('AIProcessing', {
             uploadEndpoint: 'https://interpark-backend.onrender.com/api/properties/upload-images',
             addEndpoint: 'https://interpark-backend.onrender.com/api/properties/add',

@@ -1,4 +1,3 @@
-// src/screens/AgentDashboard.js
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -11,8 +10,10 @@ import ChatRooms from './ChatRooms';
 import ChatList from './ChatList'; // Import the ChatList component
 import AgentProfile from './AgentProfile';
 import MyList from './MyList';
+import AIProcessingScreen from './AIProcessingScreen'; // Import AIProcessingScreen
 
 const Stack = createStackNavigator();
+const Tab = createBottomTabNavigator();
 
 // Stack Navigator for the Profile screen
 function AgentStackNavigator() {
@@ -24,10 +25,24 @@ function AgentStackNavigator() {
   );
 }
 
-// Create the Tab Navigator for AgentDashboard
-const Tab = createBottomTabNavigator();
+// Stack Navigator for AddProperty to handle AI Processing
+function AddPropertyStackNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="AddPropertyMain" component={AddProperty} />
+      <Stack.Screen 
+        name="AIProcessing" 
+        component={AIProcessingScreen}
+        options={{
+          gestureEnabled: false, // Prevent swipe back during processing
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
 
-export default function AgentDashboard() {
+// Tab Navigator Component
+function TabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -56,7 +71,13 @@ export default function AgentDashboard() {
     >
       {/* Define the tabs */}
       <Tab.Screen name="PropertiesList" component={PropertiesList} />
-      <Tab.Screen name="AddProperty" component={AddProperty} />
+      <Tab.Screen 
+        name="AddProperty" 
+        component={AddPropertyStackNavigator}
+        options={{
+          tabBarLabel: 'Add Property'
+        }}
+      />
       <Tab.Screen 
         name="ChatRooms" 
         component={ChatRooms} 
@@ -65,5 +86,14 @@ export default function AgentDashboard() {
       <Tab.Screen name="ChatList" component={ChatList} />
       <Tab.Screen name="Profile" component={AgentStackNavigator} />
     </Tab.Navigator>
+  );
+}
+
+// Main AgentDashboard with Stack Navigator for overall structure
+export default function AgentDashboard() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="AgentDashboardTabs" component={TabNavigator} />
+    </Stack.Navigator>
   );
 }

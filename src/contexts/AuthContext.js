@@ -35,15 +35,20 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       
-      // Check for stored authentication data
-      const [storedToken, storedUser, storedRole] = await Promise.all([
+      // Check for stored authentication data - Try both token keys for compatibility
+      const [storedToken, storedTokenAlt, storedUser, storedUserAlt, storedRole] = await Promise.all([
         AsyncStorage.getItem('userToken'),
+        AsyncStorage.getItem('auth_token'),
         AsyncStorage.getItem('userData'),
+        AsyncStorage.getItem('user'),
         AsyncStorage.getItem('lastRole')
       ]);
 
-      if (storedToken && storedUser) {
-        const userData = JSON.parse(storedUser);
+      const token = storedToken || storedTokenAlt;
+      const userDataString = storedUser || storedUserAlt;
+
+      if (token && userDataString) {
+        const userData = JSON.parse(userDataString);
         setUser(userData);
         setIsAuthenticated(true);
         
@@ -51,7 +56,13 @@ export const AuthProvider = ({ children }) => {
           setLastRole(storedRole);
         }
 
-        // Preload chat rooms for returning user
+        // Ensure both storage keys are set for compatibility
+        if (!storedToken) await AsyncStorage.setItem('userToken', token);
+        if (!storedTokenAlt) await AsyncStorage.setItem('auth_token', token);
+        if (!storedUser) await AsyncStorage.setItem('userData', userDataString);
+        if (!storedUserAlt) await AsyncStorage.setItem('user', userDataString);
+
+        // Preload chat rooms for returning user using the correct API endpoint
         if (userData.id || userData.userId) {
           await preloadChatRooms(userData.id || userData.userId);
         }
@@ -88,72 +99,91 @@ export const AuthProvider = ({ children }) => {
       setIsLoadingChatRooms(true);
       console.log('Preloading chat rooms for user:', userId);
       
-      // Get stored chat rooms
-      const storedChatRooms = await AsyncStorage.getItem('userChatRooms');
-      if (storedChatRooms) {
-        const parsedChatRooms = JSON.parse(storedChatRooms);
-        
-        if (parsedChatRooms.length > 0) {
-          // Load detailed chat rooms from backend
-          const response = await axios.post(
-            `https://interpark-backend.onrender.com/api/chat/detailed-rooms`, 
-            {
-              chatRoomIds: parsedChatRooms.map(room => room.id),
-              userId: userId
-            },
-            {
-              timeout: 10000 // 10 second timeout
-            }
-          );
+      // Use the correct API endpoint that filters chat rooms by user participation
+      const response = await axios.get(
+        `https://interpark-backend.onrender.com/api/chat/rooms/${userId}`,
+        {
+          timeout: 10000 // 10 second timeout
+        }
+      );
 
-          if (response.data && response.data.chatRooms) {
-            const detailedRooms = response.data.chatRooms;
-            const sortedRooms = sortChatRooms(detailedRooms);
-            
-            setChatRooms(sortedRooms);
-            
-            // Extract unread counts, last messages, and property data
-            const unreadData = {};
-            const lastMessageData = {};
-            const propertyData = {};
-            
-            detailedRooms.forEach(room => {
-              unreadData[room.id] = room.unreadCount || 0;
-              if (room.lastMessage) {
-                lastMessageData[room.id] = {
-                  content: room.lastMessage.content,
-                  timestamp: room.lastMessage.timestamp
-                };
-              }
-              if (room.property) {
-                propertyData[room.propertyId] = room.property.title;
-              }
-            });
-            
-            setUnreadCounts(unreadData);
-            setLastMessages(lastMessageData);
-            setProperties(propertyData);
-            
-            console.log(`Successfully preloaded ${sortedRooms.length} chat rooms`);
+      if (response.data && response.data.length > 0) {
+        const userChatRooms = response.data;
+        console.log(`Found ${userChatRooms.length} chat rooms for user`);
+        
+        // Store the user's chat rooms in AsyncStorage for offline access
+        await AsyncStorage.setItem('userChatRooms', JSON.stringify(userChatRooms));
+        
+        // Get detailed information for these chat rooms
+        const detailedResponse = await axios.post(
+          `https://interpark-backend.onrender.com/api/chat/detailed-rooms`, 
+          {
+            chatRoomIds: userChatRooms.map(room => room.id),
+            userId: userId.toString()
+          },
+          {
+            timeout: 10000 // 10 second timeout
           }
-        } else {
-          console.log('No stored chat rooms found');
-          setChatRooms([]);
-          setProperties({});
-          setUnreadCounts({});
-          setLastMessages({});
+        );
+
+        // Handle the Prisma response format
+        if (detailedResponse.data && detailedResponse.data.success && detailedResponse.data.chatRooms) {
+          const detailedRooms = detailedResponse.data.chatRooms;
+          const sortedRooms = sortChatRooms(detailedRooms);
+          
+          setChatRooms(sortedRooms);
+          
+          // Extract unread counts, last messages, and property data
+          const unreadData = {};
+          const lastMessageData = {};
+          const propertyData = {};
+          
+          detailedRooms.forEach(room => {
+            unreadData[room.id] = room.unreadCount || 0;
+            if (room.lastMessage) {
+              lastMessageData[room.id] = {
+                content: room.lastMessage.content,
+                timestamp: room.lastMessage.timestamp
+              };
+            }
+            if (room.property) {
+              propertyData[room.propertyId] = room.property.title;
+            }
+          });
+          
+          setUnreadCounts(unreadData);
+          setLastMessages(lastMessageData);
+          setProperties(propertyData);
+          
+          console.log(`Successfully preloaded ${sortedRooms.length} chat rooms for user ${userId}`);
         }
       } else {
-        console.log('No userChatRooms in AsyncStorage');
+        console.log('No chat rooms found for user:', userId);
         setChatRooms([]);
         setProperties({});
         setUnreadCounts({});
         setLastMessages({});
+        // Clear stored chat rooms
+        await AsyncStorage.removeItem('userChatRooms');
       }
     } catch (error) {
       console.error('Error preloading chat rooms:', error);
-      // Don't show alert for preloading errors as it's not critical
-      // Just log and continue
+      
+      // Fallback: try to load from AsyncStorage if API fails
+      try {
+        const storedChatRooms = await AsyncStorage.getItem('userChatRooms');
+        if (storedChatRooms) {
+          const parsedChatRooms = JSON.parse(storedChatRooms);
+          if (parsedChatRooms.length > 0) {
+            setChatRooms(parsedChatRooms);
+            console.log('Loaded chat rooms from cache');
+          }
+        }
+      } catch (cacheError) {
+        console.error('Error loading from cache:', cacheError);
+      }
+      
+      // Set empty state if all fails
       setChatRooms([]);
       setProperties({});
       setUnreadCounts({});
@@ -184,10 +214,12 @@ export const AuthProvider = ({ children }) => {
         ...userInfo
       };
 
-      // Store authentication data
+      // Store authentication data with both key formats for compatibility
       await Promise.all([
         AsyncStorage.setItem('userToken', token),
+        AsyncStorage.setItem('auth_token', token), // Alternative key for compatibility
         AsyncStorage.setItem('userData', JSON.stringify(userDataToStore)),
+        AsyncStorage.setItem('user', JSON.stringify(userDataToStore)), // Alternative key for compatibility
         AsyncStorage.setItem('userId', userInfo.id.toString()),
         role && AsyncStorage.setItem('lastRole', role)
       ]);
@@ -200,12 +232,10 @@ export const AuthProvider = ({ children }) => {
         setLastRole(role);
       }
 
-      console.log('User data stored successfully');
+      console.log('User data stored successfully with role:', userDataToStore.role);
 
-      // Preload chat rooms in background (don't await to avoid blocking login)
-      preloadChatRooms(userInfo.id).catch(error => {
-        console.error('Background chat room preloading failed:', error);
-      });
+      // Preload chat rooms immediately after login
+      await preloadChatRooms(userInfo.id);
 
       return true;
     } catch (error) {
@@ -222,7 +252,10 @@ export const AuthProvider = ({ children }) => {
       // Clear authentication data
       await clearAuthData();
       
-      // Clear chat rooms data
+      // Clear chat rooms data from storage
+      await AsyncStorage.removeItem('userChatRooms');
+      
+      // Clear chat rooms state
       setChatRooms([]);
       setProperties({});
       setUnreadCounts({});
@@ -245,7 +278,9 @@ export const AuthProvider = ({ children }) => {
     try {
       await Promise.all([
         AsyncStorage.removeItem('userToken'),
+        AsyncStorage.removeItem('auth_token'),
         AsyncStorage.removeItem('userData'),
+        AsyncStorage.removeItem('user'),
         AsyncStorage.removeItem('userId'),
         // Don't remove lastRole as it should persist for next login
       ]);
@@ -281,7 +316,13 @@ export const AuthProvider = ({ children }) => {
       if (prevRooms.find(room => room.id === newRoom.id)) {
         return prevRooms;
       }
-      return sortChatRooms([...prevRooms, newRoom]);
+      const updatedRooms = sortChatRooms([...prevRooms, newRoom]);
+      
+      // Update AsyncStorage with new chat room
+      AsyncStorage.setItem('userChatRooms', JSON.stringify(updatedRooms))
+        .catch(error => console.error('Error updating stored chat rooms:', error));
+      
+      return updatedRooms;
     });
   };
 

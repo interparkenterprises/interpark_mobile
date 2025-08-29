@@ -63,13 +63,7 @@
             "BROWSABLE"
           ]
         }
-      ],
-      "notification": {
-        "icon": "./assets/adaptive-icon.png",
-        "color": "#005478",
-        "androidMode": "default",
-        "androidCollapsedTitle": "InterPark"
-      }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
