@@ -5,7 +5,7 @@
     "slug": "InterPark",
     "version": "1.0.0",
     "orientation": "portrait",
-    "jsEngine": "jsc",
+    "jsEngine": "hermes",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
